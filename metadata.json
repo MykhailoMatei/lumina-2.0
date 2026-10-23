@@ -1,0 +1,11 @@
+{
+  "name": "Lumina: Growth & Journal",
+  "description": "A holistic self-improvement planner and journaling application powered by AI. Track habits, set goals, and reflect daily with personalized insights.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
