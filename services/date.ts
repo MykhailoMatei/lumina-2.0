@@ -1,13 +1,18 @@
 /**
- * Returns YYYY-MM-DD in the user's LOCAL timezone.
- * Replaces `new Date().toISOString().split('T')[0]`, which returns the UTC date
- * and flips to the wrong day around midnight for anyone not on UTC.
+ * Local date utilities to prevent UTC midnight timezone off-by-one shifts.
  */
+
 export const toLocalDateString = (d: Date = new Date()): string => {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  return `${year}-${month}-${day}`;
+};
+
+export const parseLocalDate = (dateStr: string): Date => {
+  const cleanStr = dateStr.split('T')[0];
+  const [year, month, day] = cleanStr.split('-').map(Number);
+  return new Date(year, month - 1, day);
 };
 
 export const daysAgo = (n: number): Date => {

@@ -185,7 +185,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                 </div>
 
                 <div className="mt-4 flex items-center justify-center gap-1.5 text-[10px] font-medium text-slate-400">
-                    <Lock size={10} /> 256-Bit Encryption
+                    <Lock size={10} /> Secured by Supabase Auth
                 </div>
             </div>
         </div>

@@ -10,6 +10,7 @@ import {
     Share2, ExternalLink, Flame, Sprout, AlertCircle
 } from 'lucide-react';
 import { generateMilestonesForGoal } from '../services/geminiService';
+import { toLocalDateString, parseLocalDate } from '../services/date';
 
 interface GoalsProps {
     setView: (view: string) => void;
@@ -41,7 +42,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
     const [milestones, setMilestones] = useState<string[]>([]);
     const [manualMilestone, setManualMilestone] = useState('');
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = toLocalDateString();
 
     const filtered = goals.filter(g => {
         if (activeTab === 'active') return !g.completed && !g.isPaused;
@@ -52,7 +53,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
 
     const formatDate = (dateStr?: string) => {
         if (!dateStr) return '';
-        const date = new Date(dateStr);
+        const date = parseLocalDate(dateStr.split('T')[0]);
         return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     };
 

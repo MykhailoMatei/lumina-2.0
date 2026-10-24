@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
     ComposedChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, 
@@ -13,6 +13,7 @@ import {
     Check, RefreshCw, Clock
 } from 'lucide-react';
 import { generateGrowthAudit } from '../services/geminiService';
+import { toLocalDateString, daysAgo } from '../services/date';
 
 const THEME_HEX_MAP: Record<string, string> = {
   indigo: '#6366f1',
@@ -28,7 +29,10 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
   const [audit, setAudit] = useState<any>(null);
   const [loadingAudit, setLoadingAudit] = useState(false);
   const [showThemeHelp, setShowThemeHelp] = useState(false);
-  const [lastAuditTime, setLastAuditTime] = useState<string | null>(localStorage.getItem('lumina_last_audit_time'));
+
+  const AUDIT_CACHE_KEY = 'lumina_audit_cache';
+  const [lastAuditTime, setLastAuditTime] = useState<string | null>(null);
+  const loadingRef = useRef(false);
 
   const accentHex = THEME_HEX_MAP[themeColor || 'indigo'] || '#6366f1';
 
@@ -37,45 +41,59 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
   const hasGoals = goals.length > 0;
   const hasAnyData = hasHabits || hasJournal || hasGoals;
 
-  const fetchAudit = useCallback(async (force: boolean = false) => {
-    if (!hasAnyData) return;
-    if (loadingAudit) return;
-    
-    setLoadingAudit(true);
-    try {
-        console.log("Triggering Growth Audit with Force:", force);
-        const res = await generateGrowthAudit(habits, goals, journalEntries, language);
-        setAudit(res);
-        const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        setLastAuditTime(nowStr);
-        localStorage.setItem('lumina_last_audit_time', nowStr);
-    } catch (e) {
-        console.error("Audit fetch failed in component:", e);
-    } finally {
-        // Minimum delay for UI satisfaction
-        setTimeout(() => setLoadingAudit(false), 800);
-    }
-  }, [habits, goals, journalEntries, language, hasAnyData, loadingAudit]);
-
-  // Comprehensive key that changes whenever any completion data changes
+  // Changes only when data that matters to the audit changes (no clock in the key).
   const dataSignalKey = useMemo(() => {
     const habitKey = habits.map(h => `${h.id}-${h.completedDates.length}-${h.streak}`).join('|');
     const journalKey = journalEntries.length > 0 ? journalEntries[0].id + journalEntries[0].content.length : 'none';
     const goalKey = goals.map(g => `${g.id}-${g.progress}`).join('|');
-    return `${habitKey}-${journalKey}-${goalKey}-${new Date().getHours()}`;
-  }, [habits, journalEntries, goals]);
+    return `${language}::${habitKey}::${journalKey}::${goalKey}`;
+  }, [habits, journalEntries, goals, language]);
 
+  const readCache = () => {
+    try { return JSON.parse(localStorage.getItem(AUDIT_CACHE_KEY) || 'null'); } catch { return null; }
+  };
+
+  const runAudit = useCallback(async () => {
+    if (!hasAnyData || loadingRef.current) return;
+    loadingRef.current = true;
+    setLoadingAudit(true);
+    try {
+      const res = await generateGrowthAudit(habits, goals, journalEntries, language);
+      const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      setAudit(res);
+      setLastAuditTime(nowStr);
+      // Don't cache fallback/calibrating results, so they retry next time.
+      if (!res.isCalibrating) {
+        try {
+          localStorage.setItem(AUDIT_CACHE_KEY, JSON.stringify({ key: dataSignalKey, audit: res, time: nowStr }));
+        } catch { /* storage full: ignore */ }
+      }
+    } catch (e) {
+      console.error('Audit fetch failed in component:', e);
+    } finally {
+      loadingRef.current = false;
+      setTimeout(() => setLoadingAudit(false), 800);
+    }
+  }, [habits, goals, journalEntries, language, hasAnyData, dataSignalKey]);
+
+  // Use the cached audit if the data hasn't changed; otherwise wait for edits to settle, then call the AI once.
   useEffect(() => {
-    fetchAudit();
-  }, [dataSignalKey, language]);
+    if (!hasAnyData) return;
+    const cached = readCache();
+    if (cached?.key === dataSignalKey) {
+      setAudit(cached.audit);
+      setLastAuditTime(cached.time);
+      return;
+    }
+    const id = window.setTimeout(runAudit, 1500);
+    return () => window.clearTimeout(id);
+  }, [dataSignalKey, hasAnyData, runAudit]);
 
   const momentumGrid = useMemo(() => {
     const daysCount = 35;
     const result: { dateStr: string; ratio: number; }[] = [];
     for(let i = daysCount - 1; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        const dateStr = d.toISOString().split('T')[0];
+        const dateStr = toLocalDateString(daysAgo(i));
         const habitsDone = habits.filter(h => h.completedDates.includes(dateStr)).length;
         const total = habits.length;
         const ratio = total > 0 ? habitsDone / total : 0;
@@ -160,7 +178,7 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
               </div>
               <div className="flex gap-2 shrink-0">
                   <button 
-                      onClick={() => fetchAudit(true)}
+                      onClick={() => runAudit()}
                       disabled={loadingAudit}
                       className={`p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm transition-all active:scale-90 ${loadingAudit ? 'opacity-50' : ''}`}
                   >

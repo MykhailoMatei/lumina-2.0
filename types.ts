@@ -58,6 +58,8 @@ export interface Habit {
 export interface JournalEntry {
   id: string;
   date: string; 
+  title?: string;
+  category?: string;
   content: string;
   prompt: string;
   mood: 'Great' | 'Good' | 'Neutral' | 'Bad' | 'Awful';

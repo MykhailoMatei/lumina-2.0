@@ -10,6 +10,7 @@ const __dirname = path.dirname(__filename);
 
 const isProduction = process.env.NODE_ENV === 'production';
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 
 // Initialize Google GenAI with User-Agent header as required
 const getGenAIClient = () => {
@@ -66,7 +67,7 @@ async function startServer() {
     try {
       const ai = getGenAIClient();
       const response = await generateWithRetry(ai, {
-        model: 'gemini-3.8-flash',
+        model: MODEL,
         contents: "Reply 'OK'.",
       });
       res.json({ success: !!response.text, message: 'AI Connection verified!' });
@@ -118,7 +119,7 @@ async function startServer() {
     try {
       const ai = getGenAIClient();
       const response = await generateWithRetry(ai, {
-        model: 'gemini-3.8-flash',
+        model: MODEL,
         contents: prompt,
         config: { responseMimeType: 'application/json', temperature: 0.4 },
       });
@@ -172,7 +173,7 @@ async function startServer() {
     try {
       const ai = getGenAIClient();
       const response = await generateWithRetry(ai, {
-        model: 'gemini-3.8-flash',
+        model: MODEL,
         contents: prompt,
         config: { responseMimeType: 'application/json', temperature: 0.7 },
       });
@@ -204,7 +205,7 @@ async function startServer() {
     try {
       const ai = getGenAIClient();
       const response = await generateWithRetry(ai, {
-        model: 'gemini-3.8-flash',
+        model: MODEL,
         contents: prompt,
         config: { responseMimeType: 'application/json' },
       });
@@ -224,7 +225,7 @@ async function startServer() {
     try {
       const ai = getGenAIClient();
       const response = await generateWithRetry(ai, {
-        model: 'gemini-3.8-flash',
+        model: MODEL,
         contents: prompt,
         config: { responseMimeType: 'application/json' },
       });
@@ -244,7 +245,7 @@ async function startServer() {
     try {
       const ai = getGenAIClient();
       const response = await generateWithRetry(ai, {
-        model: 'gemini-3.8-flash',
+        model: MODEL,
         contents: prompt,
         config: { responseMimeType: 'application/json' },
       });
@@ -262,7 +263,7 @@ async function startServer() {
 
     const parts: any[] = [
       {
-        text: `${getLangInstr(lang)} Strategic growth insight based on this reflection. Avoid archaic wisdom. Focus on behavioral psychology and self-compassion. Mood: ${mood}.${goalTitle ? ` Related Goal: ${goalTitle}.` : ''}${habitTitle ? ` Related Habit: ${habitTitle}.` : ''} JSON: { "insight": "..." } Content: ${content}`,
+        text: `${getLangInstr(lang)} Provide a brief, supportive, uplifting 1-2 sentence observation or encouraging takeaway based on this journal entry. Whether it is a simple daily log (what they did/ate), a small victory, or a deeper reflection, be warm, genuine, positive, and practical. Avoid preachiness, unsolicited critique, or ancient metaphors. Mood: ${mood}.${goalTitle ? ` Related Goal: ${goalTitle}.` : ''}${habitTitle ? ` Related Habit: ${habitTitle}.` : ''} JSON: { "insight": "..." } Content: ${content}`,
       },
     ];
 
@@ -286,7 +287,7 @@ async function startServer() {
     try {
       const ai = getGenAIClient();
       const response = await generateWithRetry(ai, {
-        model: 'gemini-3.8-flash',
+        model: MODEL,
         contents: { parts },
         config: { responseMimeType: 'application/json' },
       });
@@ -300,7 +301,7 @@ async function startServer() {
 
   // 8. Streaming Content Generation (Server-Sent Events)
   app.post('/api/gemini/generate-stream', async (req: Request, res: Response) => {
-    const { prompt, model = 'gemini-3.8-flash', systemInstruction } = req.body;
+    const { prompt, model = MODEL, systemInstruction } = req.body;
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');

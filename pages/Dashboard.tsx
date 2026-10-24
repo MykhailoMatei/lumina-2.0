@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { generateDailyBriefing, suggestAtomicHabit } from '../services/geminiService';
 import { Habit, GoalCategory } from '../types';
+import { toLocalDateString, parseLocalDate } from '../services/date';
 
 interface DashboardProps {
     setView: (view: string) => void;
@@ -20,7 +21,7 @@ interface MomentumDay {
     dayOfWeek: number;
 }
 
-const getTodayString = () => new Date().toISOString().split('T')[0];
+const getTodayString = () => toLocalDateString();
 const DAYS_OF_WEEK = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 const CATEGORY_META: Record<GoalCategory, { label: string; icon: any; desc: string }> = {
@@ -99,7 +100,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
         for (let i = 6; i >= 0; i--) {
             const d = new Date(baseDate);
             d.setDate(baseDate.getDate() - i);
-            const iso = d.toISOString().split('T')[0];
+            const iso = toLocalDateString(d);
             days.push({
                 full: iso,
                 dayNum: d.getDate(),
@@ -122,7 +123,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
     const [activeHabitTab, setActiveHabitTab] = useState<'Morning' | 'Afternoon' | 'Evening' | 'Anytime'>(initialTab);
 
     const getHabitsForSelectedDate = useCallback(() => {
-        const d = new Date(selectedDate);
+        const d = parseLocalDate(selectedDate);
         const dayOfWeek = d.getDay();
         const dayOfMonth = d.getDate();
         
@@ -184,7 +185,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
         const checkBriefingStaleness = () => {
             if (dashboardLayout?.showDailyWisdom === false) return;
             const lastUpdate = lastBriefingUpdate ? new Date(lastBriefingUpdate) : null;
-            const lastUpdateDateStr = lastUpdate ? lastUpdate.toISOString().split('T')[0] : null;
+            const lastUpdateDateStr = lastUpdate ? toLocalDateString(lastUpdate) : null;
             if (lastUpdateDateStr !== currentTodayStr) {
                 fetchBriefing();
             }
@@ -351,7 +352,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
         }
 
         if (habitsForDay.length === 0) {
-            const dayName = new Date(selectedDate).toLocaleDateString(undefined, { weekday: 'long' });
+            const dayName = parseLocalDate(selectedDate).toLocaleDateString(undefined, { weekday: 'long' });
             return (
                 <div className="w-full bg-white/5 backdrop-blur-md rounded-[2rem] p-4 flex items-center justify-center text-white/70 border border-white/5">
                     <Calendar className="mr-2 opacity-50" size={14} />
@@ -430,7 +431,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                                 <div className={`w-8 h-8 rounded-xl ${themeClasses.primary} flex items-center justify-center text-white shadow-md`}><Zap size={16} /></div>
                                 <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{t('keystone')}</h2>
                             </div>
-                            <span className="text-xs font-medium text-slate-400">{new Date(selectedDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                            <span className="text-xs font-medium text-slate-400">{parseLocalDate(selectedDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
                         </div>
                         <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 leading-snug mb-4">{dailyBriefing.priorityTask}</p>
                         <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
@@ -773,49 +774,135 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                                     </p>
 
                                     {/* Days Selection */}
-                                    <div className="space-y-2">
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                                                Active Days
-                                            </span>
-                                            <div className="flex items-center gap-2">
+                                    <div className="space-y-2.5">
+                                        <div className="flex items-center justify-between gap-2">
+                                            {/* Weekly vs Monthly Pill Switcher */}
+                                            <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl shrink-0">
                                                 <button
                                                     type="button"
-                                                    onClick={selectAllDays}
-                                                    className="text-[10px] font-semibold text-indigo-500 dark:text-indigo-400 hover:underline"
+                                                    onClick={() => setScheduleType('weekly')}
+                                                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                                                        scheduleType === 'weekly'
+                                                            ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm'
+                                                            : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+                                                    }`}
                                                 >
-                                                    Every Day
+                                                    Weekly
                                                 </button>
-                                                <span className="text-slate-300 dark:text-slate-600">•</span>
                                                 <button
                                                     type="button"
-                                                    onClick={selectWeekdays}
-                                                    className="text-[10px] font-semibold text-indigo-500 dark:text-indigo-400 hover:underline"
+                                                    onClick={() => {
+                                                        setScheduleType('monthly');
+                                                        if (monthlyDays.length === 0) setMonthlyDays([1]);
+                                                    }}
+                                                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                                                        scheduleType === 'monthly'
+                                                            ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm'
+                                                            : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+                                                    }`}
                                                 >
-                                                    Weekdays
+                                                    Monthly
                                                 </button>
                                             </div>
+
+                                            {/* Presets based on schedule type */}
+                                            {scheduleType === 'weekly' ? (
+                                                <div className="flex items-center gap-1.5 text-[11px]">
+                                                    <button
+                                                        type="button"
+                                                        onClick={selectAllDays}
+                                                        className="font-semibold text-indigo-500 dark:text-indigo-400 hover:underline"
+                                                    >
+                                                        Every Day
+                                                    </button>
+                                                    <span className="text-slate-300 dark:text-slate-600">•</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={selectWeekdays}
+                                                        className="font-semibold text-indigo-500 dark:text-indigo-400 hover:underline"
+                                                    >
+                                                        Weekdays
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-center gap-1.5 text-[10px]">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setMonthlyDays([1])}
+                                                        className="font-semibold text-indigo-500 dark:text-indigo-400 hover:underline"
+                                                    >
+                                                        1st
+                                                    </button>
+                                                    <span className="text-slate-300 dark:text-slate-600">•</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setMonthlyDays([1, 15])}
+                                                        className="font-semibold text-indigo-500 dark:text-indigo-400 hover:underline"
+                                                    >
+                                                        1st & 15th
+                                                    </button>
+                                                    <span className="text-slate-300 dark:text-slate-600">•</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setMonthlyDays([31])}
+                                                        className="font-semibold text-indigo-500 dark:text-indigo-400 hover:underline"
+                                                    >
+                                                        EOM
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
 
-                                        <div className="flex justify-between items-center gap-1.5 pt-1">
-                                            {DAYS_OF_WEEK.map((day, i) => {
-                                                const isSelected = habitDays.includes(i);
-                                                return (
-                                                    <button
-                                                        key={i}
-                                                        type="button"
-                                                        onClick={() => toggleDay(i)}
-                                                        className={`flex-1 aspect-square rounded-xl text-xs font-semibold transition-all flex items-center justify-center border ${
-                                                            isSelected
-                                                                ? `${themeClasses.primary} text-white border-transparent shadow-sm`
-                                                                : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400 hover:border-slate-300'
-                                                        }`}
-                                                    >
-                                                        {day}
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
+                                        {/* Weekly Day Circles */}
+                                        {scheduleType === 'weekly' ? (
+                                            <div className="flex justify-between items-center gap-1.5 pt-0.5">
+                                                {DAYS_OF_WEEK.map((day, i) => {
+                                                    const isSelected = habitDays.includes(i);
+                                                    return (
+                                                        <button
+                                                            key={i}
+                                                            type="button"
+                                                            onClick={() => toggleDay(i)}
+                                                            className={`flex-1 aspect-square rounded-xl text-xs font-semibold transition-all flex items-center justify-center border ${
+                                                                isSelected
+                                                                    ? `${themeClasses.primary} text-white border-transparent shadow-sm`
+                                                                    : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400 hover:border-slate-300'
+                                                            }`}
+                                                        >
+                                                            {day}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        ) : (
+                                            /* Monthly 31-Day Date Matrix */
+                                            <div className="space-y-1.5 pt-0.5">
+                                                <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium px-0.5">
+                                                    <span>Select Day(s) of Month:</span>
+                                                    <span>{monthlyDays.length > 0 ? `${monthlyDays.length} selected` : 'None'}</span>
+                                                </div>
+                                                <div className="grid grid-cols-7 gap-1 max-h-36 overflow-y-auto no-scrollbar p-1 bg-slate-50 dark:bg-slate-850/60 rounded-2xl border border-slate-100 dark:border-slate-800">
+                                                    {Array.from({ length: 31 }).map((_, i) => {
+                                                        const dayNum = i + 1;
+                                                        const isSelected = monthlyDays.includes(dayNum);
+                                                        return (
+                                                            <button
+                                                                key={dayNum}
+                                                                type="button"
+                                                                onClick={() => toggleMonthlyDay(dayNum)}
+                                                                className={`aspect-square rounded-lg text-[11px] font-semibold transition-all flex items-center justify-center border ${
+                                                                    isSelected
+                                                                        ? `${themeClasses.primary} text-white border-transparent shadow-sm`
+                                                                        : 'bg-white dark:bg-slate-800 border-slate-200/80 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300'
+                                                                }`}
+                                                            >
+                                                                {dayNum === 31 ? 'EOM' : dayNum}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* Clean Time Window Chips */}
