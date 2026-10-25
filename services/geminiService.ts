@@ -1,12 +1,14 @@
 import { Goal, AppLanguage, Habit, JournalEntry, DailyBriefing } from "../types";
 
+const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '');
+
 const GET_DAILY_FALLBACK = (_lang: AppLanguage): DailyBriefing => {
   return {
-    motivation: "Consistency is the only variable within your direct control. Focus on the execution, not the outcome.",
-    focus: "Operational Efficiency",
-    tip: "Reduce friction in your environment to make your desired habits the default choice.",
-    journalPrompt: "What was the most effective choice you made today?",
-    priorityTask: "Audit your current workload and identify one high-leverage task to focus on."
+    motivation: "Small, consistent actions each day quietly add up to meaningful change.",
+    focus: "Daily Balance",
+    tip: "Make your next habit easy to start—even just two minutes builds momentum.",
+    journalPrompt: "What is one moment from today you'd like to remember?",
+    priorityTask: "Choose one meaningful step today and give it your full attention."
   };
 };
 
@@ -27,7 +29,7 @@ export const generateGrowthAudit = async (
   isCalibrating: boolean
 }> => {
     try {
-        const res = await fetch('/api/gemini/growth-audit', {
+        const res = await fetch(`${API_BASE}/api/gemini/growth-audit`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ habits, goals, journal, lang })
@@ -38,14 +40,14 @@ export const generateGrowthAudit = async (
     } catch (e) {
         console.error('Error generating growth audit:', e);
         return { 
-            summary: "Data patterns are stabilizing.", 
-            correlation: "Identifying leverage points.", 
-            advice: "Stick to the schedule.", 
-            trajectory: "Incremental progress.", 
-            happinessTrigger: "Your routine is your foundation.", 
-            mentalThemes: ["Consistency"], 
+            summary: "Your daily patterns are steady.", 
+            correlation: "Your daily habits support your bigger intentions.", 
+            advice: "Take it one day at a time—consistency builds naturally.", 
+            trajectory: "Steady, calm progress.", 
+            happinessTrigger: "Your regular routines create a sense of calm.", 
+            mentalThemes: ["Consistency", "Balance"], 
             identityScores: [], 
-            archetype: "Systems Builder", 
+            archetype: "Mindful Explorer", 
             isCalibrating: true 
         };
     }
@@ -59,7 +61,7 @@ export const generateDailyBriefing = async (
     lang: AppLanguage
 ): Promise<DailyBriefing> => {
   try {
-    const res = await fetch('/api/gemini/daily-briefing', {
+    const res = await fetch(`${API_BASE}/api/gemini/daily-briefing`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, goals, habits, recentJournal, lang })
@@ -67,11 +69,11 @@ export const generateDailyBriefing = async (
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
     const data = await res.json();
     return {
-      motivation: data.motivation || "Success is the product of daily systems, not once-in-a-lifetime transformations.",
-      focus: data.focus || "System Integrity",
-      tip: data.tip || "Identify the point of greatest friction in your routine and resolve it.",
-      journalPrompt: data.journalPrompt || data.journal_prompt || "What choice today saved you time or energy?",
-      priorityTask: data.priorityTask || "Audit your current queue and eliminate one non-essential task."
+      motivation: data.motivation || "Small, consistent actions each day quietly add up to meaningful change.",
+      focus: data.focus || "Daily Balance",
+      tip: data.tip || "Make your next habit easy to start—even just two minutes builds momentum.",
+      journalPrompt: data.journalPrompt || data.journal_prompt || "What is one moment from today you'd like to remember?",
+      priorityTask: data.priorityTask || "Choose one meaningful step today and give it your full attention."
     };
   } catch (err) {
     console.error('Error generating daily briefing:', err);
@@ -79,9 +81,47 @@ export const generateDailyBriefing = async (
   }
 };
 
+export const generateWeeklyReview = async (
+  name: string,
+  habits: Habit[],
+  goals: Goal[],
+  recentJournal: JournalEntry[],
+  weekStats: { completionRate: number; completedCount: number; scheduledCount: number },
+  lang: AppLanguage
+): Promise<{
+  summary: string;
+  keyWin: string;
+  suggestedAdjustment: string;
+  upcomingFocus: string;
+}> => {
+  try {
+    const res = await fetch(`${API_BASE}/api/gemini/weekly-review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, habits, goals, recentJournal, weekStats, lang })
+    });
+    if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+    const data = await res.json();
+    return {
+      summary: data.summary || "You showed up with quiet consistency this week. Small actions laid the foundation for steady calm.",
+      keyWin: data.keyWin || "Staying committed to your daily routines.",
+      suggestedAdjustment: data.suggestedAdjustment || "Pick one habit to keep effortless, and protect 10 minutes of quiet each evening.",
+      upcomingFocus: data.upcomingFocus || "Continue building momentum with steady, unhurried steps."
+    };
+  } catch (err) {
+    console.error('Error generating weekly review:', err);
+    return {
+      summary: "You showed up with quiet consistency this week. Small actions laid the foundation for steady calm.",
+      keyWin: "Staying committed to your daily routines.",
+      suggestedAdjustment: "Pick one habit to keep effortless, and protect 10 minutes of quiet each evening.",
+      upcomingFocus: "Continue building momentum with steady, unhurried steps."
+    };
+  }
+};
+
 export const testApiConnection = async (): Promise<{ success: boolean; message: string }> => {
   try {
-    const res = await fetch('/api/gemini/test-connection');
+    const res = await fetch(`${API_BASE}/api/gemini/test-connection`);
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
       return { success: false, message: errData.message || `Server returned ${res.status}` };
@@ -95,7 +135,7 @@ export const testApiConnection = async (): Promise<{ success: boolean; message: 
 
 export const suggestAtomicHabit = async (habitTitle: string, lang: AppLanguage): Promise<{ suggestion: string; reason: string }> => {
   try {
-    const res = await fetch('/api/gemini/atomic-habit', {
+    const res = await fetch(`${API_BASE}/api/gemini/atomic-habit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ habitTitle, lang })
@@ -110,7 +150,7 @@ export const suggestAtomicHabit = async (habitTitle: string, lang: AppLanguage):
 
 export const generateMilestonesForGoal = async (goalTitle: string, lang: AppLanguage): Promise<string[]> => {
   try {
-    const res = await fetch('/api/gemini/goal-milestones', {
+    const res = await fetch(`${API_BASE}/api/gemini/goal-milestones`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ goalTitle, lang })
@@ -126,7 +166,7 @@ export const generateMilestonesForGoal = async (goalTitle: string, lang: AppLang
 
 export const translateContent = async (title: string, content: string, lang: AppLanguage): Promise<{ title: string; content: string }> => {
   try {
-    const res = await fetch('/api/gemini/translate', {
+    const res = await fetch(`${API_BASE}/api/gemini/translate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title, content, lang })
@@ -148,7 +188,7 @@ export const generateEntryInsight = async (
   lang: AppLanguage
 ): Promise<string> => {
   try {
-    const res = await fetch('/api/gemini/entry-insight', {
+    const res = await fetch(`${API_BASE}/api/gemini/entry-insight`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content, mood, goalTitle, habitTitle, imageData, lang })
@@ -172,7 +212,7 @@ export const streamGeminiContent = async (
   onError?: (err: any) => void
 ): Promise<void> => {
   try {
-    const response = await fetch('/api/gemini/generate-stream', {
+    const response = await fetch(`${API_BASE}/api/gemini/generate-stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt }),

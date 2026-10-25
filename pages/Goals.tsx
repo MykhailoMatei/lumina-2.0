@@ -180,10 +180,10 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
         const linkedHabits = habits.filter(h => h.linkedGoalId === goal.id);
         const completions = linkedHabits.reduce((acc, h) => acc + h.completedDates.length, 0);
         
-        if (completions > 5) return { label: 'Active Flow', color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-900/10' };
-        if (completions > 2) return { label: 'Steady Rise', color: 'text-indigo-500', bg: 'bg-indigo-50 dark:bg-indigo-900/10' };
+        if (completions > 5) return { label: 'High momentum', color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-900/10' };
+        if (completions > 2) return { label: 'Steady momentum', color: 'text-indigo-500', bg: 'bg-indigo-50 dark:bg-indigo-900/10' };
         if (completions > 0) return { label: 'Returning', color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-900/10' };
-        return { label: 'Quiet Roots', color: 'text-slate-400', bg: 'bg-slate-50 dark:bg-slate-800/50' };
+        return { label: 'Starting out', color: 'text-slate-400', bg: 'bg-slate-50 dark:bg-slate-800/50' };
     };
 
     const getSeasonMarker = (dateStr?: string) => {
@@ -234,19 +234,18 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
         setView('journal');
     };
 
-    // Fixed: Added mandatory 'category' property from the goal to the extracted ritual
     const extractRitualFromGoal = (goal: Goal, e: React.MouseEvent) => {
         e.stopPropagation();
         addHabit({
             id: Date.now().toString(),
-            title: `Ritual: ${goal.title}`,
+            title: `Habit: ${goal.title}`,
             category: goal.category,
             timeOfDay: 'Anytime',
             streak: 0,
             completedDates: [],
             linkedGoalId: goal.id
         });
-        triggerNotification('Ritual Created', 'New ritual extracted from your growth path.', 'achievement');
+        triggerNotification('Habit Created', 'New habit created from your goal.', 'achievement');
     };
 
     const handleDeleteGoalRequest = (id: string, e: React.MouseEvent) => {
@@ -267,14 +266,14 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
             {/* HEADER */}
             <div className="flex justify-between items-center px-1 pt-2">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">Growth Map</h1>
+                    <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">Goals & Milestones</h1>
                 </div>
                 <button 
                     type="button"
                     onClick={() => setShowModal(true)} 
                     className={`${themeClasses.primary} text-white px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-sm active:scale-95 transition-all text-xs font-semibold uppercase tracking-wider`}
                 >
-                    <Plus size={15} strokeWidth={2.5} /> Plant Seed
+                    <Plus size={15} strokeWidth={2.5} /> New Goal
                 </button>
             </div>
 
@@ -290,7 +289,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                         {tab === 'active' && <Compass size={13} className={activeTab === tab ? themeClasses.text : ''} />}
                         {tab === 'needs' && <PauseCircle size={13} />}
                         {tab === 'hall' && <Trophy size={13} />}
-                        {tab === 'active' ? 'Nurturing' : tab === 'needs' ? 'Resting' : 'Journey'}
+                        {tab === 'active' ? 'In Progress' : tab === 'needs' ? 'Paused' : 'Completed'}
                     </button>
                 ))}
             </div>
@@ -305,9 +304,9 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                                     <Trophy size={28} className="text-slate-400" />
                                 </div>
                                 <div className="space-y-1.5">
-                                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Your Journey Awaits</p>
+                                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Completed Goals</p>
                                     <p className="text-xs font-normal text-slate-400 dark:text-slate-500 leading-relaxed max-w-[240px] mx-auto italic">
-                                        This hall captures the echoes of your transformation. Complete a goal to see it bloom here.
+                                        Completed goals and reflections will appear here as you reach milestones.
                                     </p>
                                 </div>
                             </div>
@@ -317,9 +316,9 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                                     <PauseCircle size={28} className="text-slate-400" />
                                 </div>
                                 <div className="space-y-1.5">
-                                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Resting Phase</p>
+                                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Paused Goals</p>
                                     <p className="text-xs font-normal text-slate-400 dark:text-slate-500 leading-relaxed max-w-[240px] mx-auto italic">
-                                        No active rest. All your intentions are currently in motion or waiting to be planted.
+                                        No paused goals. Any goals on hold will be listed here.
                                     </p>
                                 </div>
                             </div>
@@ -330,9 +329,9 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                                     <Sprout size={32} className={`${themeClasses.text} relative z-10`} />
                                 </div>
                                 <div className="space-y-2">
-                                    <p className="text-base font-bold text-slate-700 dark:text-slate-200">A Blank Canvas</p>
+                                    <p className="text-base font-bold text-slate-700 dark:text-slate-200">No Goals Yet</p>
                                     <p className="text-xs font-normal text-slate-500 dark:text-slate-400 leading-relaxed max-w-[260px] mx-auto italic">
-                                        "A vision without structure is just a dream." Plant your first seed to begin the transformation.
+                                        Set clear targets, break them into milestones, and build steady daily habits.
                                     </p>
                                     <div className="pt-4">
                                         <button 
@@ -340,7 +339,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                                             onClick={() => setShowModal(true)}
                                             className={`px-6 py-3 rounded-2xl ${themeClasses.primary} text-white text-xs font-semibold uppercase tracking-wider shadow-md active:scale-95 transition-all`}
                                         >
-                                            Plant Your First Seed
+                                            Add Your First Goal
                                         </button>
                                     </div>
                                 </div>
@@ -404,7 +403,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                                             <div className="space-y-2 p-4 bg-slate-50/50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-slate-800/50">
                                                 <div className="flex items-center gap-2 mb-1">
                                                     <Quote size={13} className={themeClasses.text} />
-                                                    <p className="text-[10px] font-semibold uppercase text-slate-400 tracking-wider">Identity Impact</p>
+                                                    <p className="text-[10px] font-semibold uppercase text-slate-400 tracking-wider">Reflection & Impact</p>
                                                 </div>
                                                 <textarea 
                                                     className="w-full bg-transparent text-xs font-normal text-slate-600 dark:text-slate-300 italic leading-relaxed resize-none border-none outline-none"
@@ -422,7 +421,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                                                 </button>
                                                 <button type="button" onClick={(e) => extractRitualFromGoal(goal, e)} className="flex items-center justify-center gap-2 py-2.5 bg-slate-50 dark:bg-slate-800 text-slate-500 hover:text-amber-500 rounded-xl transition-all active:scale-[0.98]">
                                                     <Zap size={13} />
-                                                    <span className="text-xs font-semibold uppercase tracking-wider">Extract Ritual</span>
+                                                    <span className="text-xs font-semibold uppercase tracking-wider">Create Habit</span>
                                                 </button>
                                                 <button type="button" onClick={(e) => onReflectAction(goal.id, e)} className="flex items-center justify-center gap-2 py-2.5 bg-slate-50 dark:bg-slate-800 text-slate-500 hover:text-indigo-500 rounded-xl transition-all active:scale-[0.98]">
                                                     <BookOpen size={13} />
@@ -478,24 +477,24 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                                             <p className="text-xs sm:text-[13px] font-normal text-slate-600 dark:text-slate-300 italic leading-relaxed">
                                                 "{goal.whyStatement || 'Seeking clarity...'}"
                                             </p>
-                                            <p className="text-[10px] font-semibold uppercase text-slate-400 tracking-wider">Emotional Anchor</p>
+                                            <p className="text-[10px] font-semibold uppercase text-slate-400 tracking-wider">Why this matters</p>
                                         </div>
 
                                         <div className={`p-4 rounded-xl ${momentum.bg} border border-transparent flex items-center justify-between`}>
                                             <div className="space-y-0.5">
-                                                <p className="text-[10px] font-semibold uppercase text-slate-500 tracking-wider">Growth Rhythm</p>
+                                                <p className="text-[10px] font-semibold uppercase text-slate-500 tracking-wider">Consistency</p>
                                                 <p className={`text-xs font-bold ${momentum.color}`}>{momentum.label}</p>
                                             </div>
                                             <div className="text-right space-y-0.5">
-                                                <p className="text-[10px] font-semibold uppercase text-slate-500 tracking-wider">Growth Stage</p>
+                                                <p className="text-[10px] font-semibold uppercase text-slate-500 tracking-wider">Progress Stage</p>
                                                 <p className="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-tight">{growthStage}</p>
                                             </div>
                                         </div>
 
                                         <div className="space-y-2.5">
                                             <div className="flex justify-between items-center px-1">
-                                                <p className="text-xs font-semibold uppercase text-slate-500 tracking-wider">Nurturing Steps</p>
-                                                <span className="text-xs font-medium text-slate-400">{doneCount} of {goal.milestones.length} tended</span>
+                                                <p className="text-xs font-semibold uppercase text-slate-500 tracking-wider">Milestones</p>
+                                                <span className="text-xs font-medium text-slate-400">{doneCount} of {goal.milestones.length} completed</span>
                                             </div>
                                             <div className="space-y-2">
                                                 {goal.milestones.map(m => (
@@ -521,7 +520,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                                         </div>
 
                                         <div className="space-y-2.5">
-                                            <p className="text-xs font-semibold uppercase text-slate-500 tracking-wider px-1">Linked Rituals</p>
+                                            <p className="text-xs font-semibold uppercase text-slate-500 tracking-wider px-1">Linked Habits</p>
                                             {linkedRituals.length > 0 ? (
                                                 <div className="grid grid-cols-2 gap-2.5">
                                                     {linkedRituals.map(h => {
@@ -533,7 +532,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                                                                         <Zap size={14} fill={isDone ? 'none' : 'currentColor'} />
                                                                     </div>
                                                                     <button 
-                                                                        type="button"
+                                                                        type="button" 
                                                                         onClick={(e) => { e.stopPropagation(); toggleHabitCompletion(h.id, today); }}
                                                                         className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all ${isDone ? `${themeClasses.primary} text-white` : 'bg-slate-100 dark:bg-slate-800 text-slate-300'}`}
                                                                     >
@@ -550,8 +549,8 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                                                 </div>
                                             ) : (
                                                 <div className="p-6 rounded-2xl border-2 border-dashed border-slate-100 dark:border-slate-800 flex flex-col items-center justify-center gap-1.5">
-                                                    <p className="text-xs font-normal text-slate-400">No linked rituals found</p>
-                                                    <button type="button" onClick={() => setView('dashboard')} className="text-xs font-semibold uppercase tracking-wider text-indigo-500 hover:text-indigo-600 transition-colors">Link Ritual</button>
+                                                    <p className="text-xs font-normal text-slate-400">No linked habits yet</p>
+                                                    <button type="button" onClick={() => setView('dashboard')} className="text-xs font-semibold uppercase tracking-wider text-indigo-500 hover:text-indigo-600 transition-colors">Link a Habit</button>
                                                 </div>
                                             )}
                                         </div>
@@ -568,12 +567,12 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                                                             </span>
                                                         </div>
                                                     ))}
-                                                    <button type="button" onClick={(e) => onReflectAction(goal.id, e)} className="w-full py-1.5 text-xs font-semibold uppercase text-indigo-500 tracking-wider">Reflect Again</button>
+                                                    <button type="button" onClick={(e) => onReflectAction(goal.id, e)} className="w-full py-1.5 text-xs font-semibold uppercase text-indigo-500 tracking-wider">Write Reflection</button>
                                                 </div>
                                             ) : (
                                                 <div className="p-6 rounded-2xl border-2 border-dashed border-slate-100 dark:border-slate-800 flex flex-col items-center justify-center gap-1.5">
-                                                    <p className="text-xs font-normal text-slate-400">No narrative reflections yet</p>
-                                                    <button type="button" onClick={(e) => onReflectAction(goal.id, e)} className="text-xs font-semibold uppercase tracking-wider text-indigo-500 hover:text-indigo-600 transition-colors">Reflect Now</button>
+                                                    <p className="text-xs font-normal text-slate-400">No reflections logged yet</p>
+                                                    <button type="button" onClick={(e) => onReflectAction(goal.id, e)} className="text-xs font-semibold uppercase tracking-wider text-indigo-500 hover:text-indigo-600 transition-colors">Write Reflection</button>
                                                 </div>
                                             )}
                                         </div>
@@ -612,19 +611,19 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                 )}
             </div>
 
-            {/* ARCHIVE JOURNEY MODAL */}
+            {/* ARCHIVE GOAL MODAL */}
             {showArchiveFlow && (
                 <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in">
                     <div className="bg-white dark:bg-slate-900 w-full max-sm rounded-[2rem] p-6 shadow-2xl border border-slate-100 dark:border-slate-800 relative animate-in zoom-in-95">
                         <button type="button" onClick={() => setShowArchiveFlow(null)} className="absolute top-5 right-5 p-1 text-slate-400 hover:text-slate-600 transition-colors"><X size={18}/></button>
                         <div className="text-center mb-6">
-                            <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">Seal Your Journey</h2>
-                            <p className="text-xs font-normal text-slate-500 dark:text-slate-400 mt-1">Growth transforms, never disappears.</p>
+                            <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">Archive Goal</h2>
+                            <p className="text-xs font-normal text-slate-500 dark:text-slate-400 mt-1">Capture what was learned and what was completed.</p>
                         </div>
                         
                         <div className="space-y-5 max-h-[60vh] overflow-y-auto no-scrollbar pb-1">
                              <div className="space-y-2">
-                                <label className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider ml-1">The Essence of Outcome</label>
+                                <label className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider ml-1">Outcome</label>
                                 <div className="grid grid-cols-2 gap-2">
                                     {(['Integrated', 'Evolved', 'Paused with Insight', 'Completed', 'Redirected'] as GoalOutcome[]).map(outcome => (
                                         <button 
@@ -641,7 +640,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
 
                              <div className="space-y-3.5">
                                 <div className="space-y-1.5">
-                                    <label className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider ml-1">Identity Impact</label>
+                                    <label className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider ml-1">Reflection & Impact</label>
                                     <textarea 
                                         value={archiveImpact}
                                         onChange={e => setArchiveImpact(e.target.value)}
@@ -654,7 +653,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                                     <textarea 
                                         value={archiveStayed}
                                         onChange={e => setArchiveStayed(e.target.value)}
-                                        placeholder="Which habits or beliefs took root?"
+                                        placeholder="Which habits or routines took root?"
                                         className="w-full bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-3 text-xs font-normal italic border border-slate-100 dark:border-slate-700 outline-none h-18 resize-none text-slate-800 dark:text-slate-200"
                                     />
                                 </div>
@@ -670,7 +669,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                              </div>
 
                              <button type="button" onClick={finalizeArchive} className={`w-full py-3.5 rounded-xl font-semibold text-xs uppercase tracking-wider text-white shadow-md bg-gradient-to-br ${themeClasses.gradient} mt-3`}>
-                                Integrate to Journey
+                                Save to Completed Goals
                              </button>
                         </div>
                     </div>
@@ -683,35 +682,35 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                         <button type="button" onClick={resetForm} className="absolute top-6 right-6 p-1.5 text-slate-400 hover:text-slate-600 transition-colors z-10"><X size={20}/></button>
                         
                         <div className="mb-6">
-                            <h2 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">{editingGoalId ? 'Refine Path' : 'New Horizon'}</h2>
-                            <p className="text-xs font-normal text-slate-500 dark:text-slate-400 mt-1">Growth transforms, never disappears.</p>
+                            <h2 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">{editingGoalId ? 'Edit Goal' : 'New Goal'}</h2>
+                            <p className="text-xs font-normal text-slate-500 dark:text-slate-400 mt-1">Define what you want to achieve and break it into clear steps.</p>
                         </div>
 
                         <form onSubmit={handleSaveGoal} className="space-y-5 flex-1 overflow-y-auto no-scrollbar pr-1 pb-2">
                             <div className="space-y-1.5">
-                                <label className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider ml-1">Goal Identity</label>
+                                <label className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider ml-1">Goal Title</label>
                                 <input 
                                     required 
                                     value={title} 
                                     onChange={e => setTitle(e.target.value)} 
                                     className="w-full bg-slate-50 dark:bg-slate-800/60 rounded-xl px-4 py-3.5 text-sm font-normal outline-none dark:text-white border border-slate-200 dark:border-slate-700 focus:border-indigo-500 transition-colors" 
-                                    placeholder="What are you becoming?" 
+                                    placeholder="e.g. Run a 10k, Read 12 books, Learn Spanish..." 
                                 />
                             </div>
 
                             <div className="space-y-1.5">
-                                <label className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider ml-1">Emotional Anchor</label>
+                                <label className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider ml-1">Why this matters</label>
                                 <textarea 
                                     value={whyStatement} 
                                     onChange={e => setWhyStatement(e.target.value)} 
                                     className="w-full bg-slate-50 dark:bg-slate-800/60 rounded-xl px-4 py-3 text-sm font-normal italic outline-none dark:text-white h-20 resize-none border border-slate-200 dark:border-slate-700 focus:border-indigo-500 transition-colors" 
-                                    placeholder="The narrative why..." 
+                                    placeholder="What will achieving this bring to your life?" 
                                 />
                             </div>
 
                             <div className="grid grid-cols-2 gap-3.5">
                                 <div className="space-y-1.5">
-                                    <label className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider ml-1">Essence</label>
+                                    <label className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider ml-1">Category</label>
                                     <select 
                                         value={category}
                                         onChange={e => setCategory(e.target.value as GoalCategory)}
@@ -723,7 +722,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                                     </select>
                                 </div>
                                 <div className="space-y-1.5">
-                                    <label className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider ml-1">Horizon</label>
+                                    <label className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider ml-1">Target Date</label>
                                     <input 
                                         type="date"
                                         value={deadline}
@@ -735,14 +734,14 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
 
                             <div className="space-y-3">
                                 <div className="flex justify-between items-center px-1">
-                                    <label className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider">Stepstones</label>
+                                    <label className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider">Milestones</label>
                                     <button 
                                         type="button" 
                                         onClick={handleGenerate} 
                                         disabled={generating || !title} 
                                         className={`text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5 ${themeClasses.text} hover:opacity-70 transition-all disabled:opacity-30`}
                                     >
-                                        {generating ? <Loader2 size={12} className="animate-spin"/> : <Sparkles size={12}/>} AI Strategy
+                                        {generating ? <Loader2 size={12} className="animate-spin"/> : <Sparkles size={12}/>} AI Milestones
                                     </button>
                                 </div>
 
@@ -755,7 +754,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                                         onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addManualMilestone())}
                                     />
                                     <button 
-                                        type="button"
+                                        type="button" 
                                         onClick={addManualMilestone}
                                         className={`w-11 h-11 rounded-xl ${themeClasses.secondary} ${themeClasses.text} flex items-center justify-center active:scale-[0.9] transition-all shrink-0 border ${themeClasses.border} shadow-sm`}
                                     >
@@ -784,7 +783,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                                 disabled={!title} 
                                 className={`w-full py-3.5 rounded-2xl font-semibold text-xs uppercase tracking-wider text-white transition-all active:scale-[0.98] bg-gradient-to-br ${themeClasses.gradient} disabled:opacity-50 mt-2`}
                             >
-                                {editingGoalId ? 'Update Path' : 'Plant Seed'}
+                                {editingGoalId ? 'Update Goal' : 'Save Goal'}
                             </button>
                         </form>
                     </div>

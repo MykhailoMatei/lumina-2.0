@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { generateGrowthAudit } from '../services/geminiService';
 import { toLocalDateString, daysAgo } from '../services/date';
+import { WeeklyReviewCard } from '../components/WeeklyReviewCard';
 
 const THEME_HEX_MAP: Record<string, string> = {
   indigo: '#6366f1',
@@ -24,7 +25,7 @@ const THEME_HEX_MAP: Record<string, string> = {
 };
 
 export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }) => {
-  const { habits, goals, journalEntries, themeColor, themeClasses, language, t } = useApp();
+  const { habits, goals, journalEntries, themeColor, themeClasses, language, t, securitySettings } = useApp();
   const [timeframe, setTimeframe] = useState<'Week' | 'Month'>('Month');
   const [audit, setAudit] = useState<any>(null);
   const [loadingAudit, setLoadingAudit] = useState(false);
@@ -54,7 +55,7 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
   };
 
   const runAudit = useCallback(async () => {
-    if (!hasAnyData || loadingRef.current) return;
+    if (!hasAnyData || loadingRef.current || securitySettings?.aiDisabled) return;
     loadingRef.current = true;
     setLoadingAudit(true);
     try {
@@ -74,7 +75,7 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
       loadingRef.current = false;
       setTimeout(() => setLoadingAudit(false), 800);
     }
-  }, [habits, goals, journalEntries, language, hasAnyData, dataSignalKey]);
+  }, [habits, goals, journalEntries, language, hasAnyData, dataSignalKey, securitySettings?.aiDisabled]);
 
   // Use the cached audit if the data hasn't changed; otherwise wait for edits to settle, then call the AI once.
   useEffect(() => {
@@ -125,31 +126,31 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
             </div>
 
             <div className="space-y-3">
-                <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">Neuro Calibration</h1>
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Unlock your identity audit</p>
+                <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">Growth Insights</h1>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Start reflecting on your progress</p>
                 
                 <div className="max-w-[320px] mx-auto p-6 bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-xl space-y-6">
                     <p className="text-xs font-normal text-slate-500 dark:text-slate-400 leading-relaxed italic">
-                        "Insights are born from consistency. Provide a signal to begin your evolution audit."
+                        "Insights are built from your daily habits, goals, and reflections. Start with any of these to see patterns here."
                     </p>
 
                     <div className="space-y-2.5">
                         <button onClick={() => setView('goals')} className={`w-full flex items-center justify-between p-3.5 rounded-xl border transition-all active:scale-[0.98] ${hasGoals ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700'}`}>
                             <div className="flex items-center gap-3">
                                 {hasGoals ? <div className="bg-emerald-500 rounded-full p-1 text-white"><Check size={12} strokeWidth={3} /></div> : <Target size={16} className="text-slate-400" />}
-                                <span className={`text-xs font-semibold uppercase tracking-wider ${hasGoals ? 'text-emerald-600' : 'text-slate-500'}`}>1. Plant a Goal</span>
+                                <span className={`text-xs font-semibold uppercase tracking-wider ${hasGoals ? 'text-emerald-600' : 'text-slate-500'}`}>1. Add a Goal</span>
                             </div>
                         </button>
                         <button onClick={() => setView('dashboard')} className={`w-full flex items-center justify-between p-3.5 rounded-xl border transition-all active:scale-[0.98] ${hasHabits ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700'}`}>
                             <div className="flex items-center gap-3">
                                 {hasHabits ? <div className="bg-emerald-500 rounded-full p-1 text-white"><Check size={12} strokeWidth={3} /></div> : <Zap size={16} className="text-slate-400" />}
-                                <span className={`text-xs font-semibold uppercase tracking-wider ${hasHabits ? 'text-emerald-600' : 'text-slate-500'}`}>2. Start a Ritual</span>
+                                <span className={`text-xs font-semibold uppercase tracking-wider ${hasHabits ? 'text-emerald-600' : 'text-slate-500'}`}>2. Create a Habit</span>
                             </div>
                         </button>
                         <button onClick={() => setView('journal')} className={`w-full flex items-center justify-between p-3.5 rounded-xl border transition-all active:scale-[0.98] ${hasJournal ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700'}`}>
                             <div className="flex items-center gap-3">
                                 {hasJournal ? <div className="bg-emerald-500 rounded-full p-1 text-white"><Check size={12} strokeWidth={3} /></div> : <BookOpen size={16} className="text-slate-400" />}
-                                <span className={`text-xs font-semibold uppercase tracking-wider ${hasJournal ? 'text-emerald-600' : 'text-slate-500'}`}>3. Write Reflection</span>
+                                <span className={`text-xs font-semibold uppercase tracking-wider ${hasJournal ? 'text-emerald-600' : 'text-slate-500'}`}>3. Write a Reflection</span>
                             </div>
                         </button>
                     </div>
@@ -163,15 +164,15 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
       <div className="pb-40 space-y-6 animate-in fade-in duration-1000">
           <header className="px-1 pt-2 flex justify-between items-end">
               <div className="flex-1 pr-4">
-                  <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">Neuro Insights</h1>
+                  <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">Insights & Patterns</h1>
                   <div className="flex flex-wrap items-center gap-2 mt-1">
                       <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                        {loadingAudit ? 'Recalibrating...' : (audit?.archetype || 'Analyzing Identity...')}
+                        {loadingAudit ? 'Reflecting...' : (audit?.archetype || 'Reviewing habits...')}
                       </p>
                       <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
                           <Clock size={11} className="text-slate-400" />
                           <span className="text-[10px] font-medium uppercase text-slate-400 tracking-wider">
-                              {lastAuditTime || 'Syncing...'}
+                              {lastAuditTime || 'Updated'}
                           </span>
                       </div>
                   </div>
@@ -201,8 +202,8 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
           <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden group">
                 <div className="flex justify-between items-start mb-4">
                     <div>
-                        <h2 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">Identity Resonance</h2>
-                        <p className="text-xs font-normal text-slate-400">Strategic vs Daily Sync</p>
+                        <h2 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">Life Balance</h2>
+                        <p className="text-xs font-normal text-slate-400">Balance across life domains</p>
                     </div>
                     <div className={`p-2.5 rounded-xl ${themeClasses.secondary} ${themeClasses.text}`}>
                         <Fingerprint size={18} />
@@ -230,7 +231,7 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
                 
                 <div className="mt-4 flex flex-wrap gap-2 relative">
                     <div className="w-full flex justify-between items-center mb-1">
-                        <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Mental Themes</span>
+                        <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Recurring Themes</span>
                         <button onClick={() => setShowThemeHelp(!showThemeHelp)} className="p-1 text-slate-400 hover:text-slate-600">
                             <Info size={13} />
                         </button>
@@ -252,8 +253,8 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
                                 <Brain size={18} className={themeClasses.text} />
                             </div>
                             <div>
-                                <h2 className="text-slate-900 dark:text-white font-bold text-sm tracking-tight">Growth Strategist</h2>
-                                <p className="text-xs font-normal text-slate-400">Dynamic AI Insight</p>
+                                <h2 className="text-slate-900 dark:text-white font-bold text-sm tracking-tight">Personal Reflection</h2>
+                                <p className="text-xs font-normal text-slate-400">Thoughtful summary of your logs</p>
                             </div>
                         </div>
                     </div>
@@ -289,12 +290,18 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
                 </div>
           </div>
 
+          {timeframe === 'Week' && (
+            <div className="animate-in fade-in duration-300">
+              <WeeklyReviewCard defaultExpanded={true} />
+            </div>
+          )}
+
           {hasHabits && (
             <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm animate-in zoom-in-95">
                   <div className="flex justify-between items-start mb-5">
                       <div>
-                          <h2 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">Momentum Density</h2>
-                          <p className="text-xs font-normal text-slate-400">Habit Execution Heatmap</p>
+                          <h2 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">Habit Consistency</h2>
+                          <p className="text-xs font-normal text-slate-400">Last 35 days activity</p>
                       </div>
                       <div className={`p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 text-indigo-500`}>
                           <LayoutGrid size={18} />

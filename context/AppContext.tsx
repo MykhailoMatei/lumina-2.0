@@ -2,11 +2,13 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo, useCallback, useRef } from 'react';
 import { 
   UserState, Goal, Habit, JournalEntry, ThemeColor, AppLanguage, 
-  DailyBriefing, AppNotification, Post, Comment 
+  DailyBriefing, AppNotification, Post, Comment, WeeklyReview
 } from '../types';
 import { performCloudSync } from '../services/syncService';
 import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 import { sendSystemNotification, requestNotificationPermission } from '../services/notificationService';
+import { calculateHabitStreak } from '../services/habitService';
+import { toLocalDateString } from '../services/date';
 
 export const APP_VERSION = '1.5.7-modern';
 
@@ -59,10 +61,10 @@ const BASE_TRANSLATIONS = {
   persistence_on: 'Cloud persistence',
   storage_label: 'LocalStorage active',
   choose_avatar: 'Choose Avatar',
-  growth_traveler: 'Growth Traveler',
-  import_success: 'Data integrated successfully.',
+  growth_traveler: 'Mindful Explorer',
+  import_success: 'Data imported successfully.',
   import_failed: 'Import failed. Check file format.',
-  cloud_core: 'Cloud Core',
+  cloud_core: 'Cloud Sync',
   sync_now: 'Sync Now',
   last_sync: 'Last synced',
   syncing: 'Syncing...',
@@ -76,26 +78,26 @@ const BASE_TRANSLATIONS = {
   welcome_back: 'Welcome back to Lumina.',
   auth_error: 'Auth Error',
   create_account: 'Join Lumina',
-  sync_desc_auth: 'Securely sync your growth map',
+  sync_desc_auth: 'Sync your habits and journal across devices',
   email_label: 'Email Address',
   password_label: 'Password',
   sign_up_btn: 'Create Account',
-  sign_in_btn: 'Enter Lumina',
+  sign_in_btn: 'Sign In',
   already_have_account: 'Already have an account?',
   no_account_yet: 'First time here?',
   sign_in_switch: 'Sign In Instead',
   sign_up_switch: 'Create Account',
   account_connected: 'Account Linked',
   connect_cloud: 'Connect Account',
-  sign_out: 'Disconnect',
+  sign_out: 'Sign Out',
   pin_prompt: 'Enter your PIN to continue',
   delete_key: 'Delete',
-  encrypted_secure: 'Securely Encrypted',
+  encrypted_secure: 'Device PIN Protection',
   snooze_btn: 'Snooze',
   done_btn: 'Done',
   privacy_policy: 'Privacy Policy',
   adjust_photo: 'Adjust Photo',
-  resize_identity: 'Resize your identity',
+  resize_identity: 'Adjust profile photo',
   drag_move: 'Drag to move',
   zoom_label: 'Zoom',
   back: 'Back',
@@ -131,14 +133,17 @@ interface AppContextType extends UserState {
   updateHabit: (id: string, updates: Partial<Habit>) => void;
   deleteHabit: (id: string) => void;
   toggleHabitCompletion: (id: string, date: string) => void;
+  redeemHabitReward: (habitId: string, amount?: number) => void;
   addJournalEntry: (entry: JournalEntry) => void;
   updateJournalEntry: (id: string, updates: Partial<JournalEntry>) => void;
   deleteJournalEntry: (id: string) => void;
+  saveWeeklyReview: (review: WeeklyReview, postToJournal?: boolean) => void;
   updateUserPreferences: (prefs: Partial<UserState>) => void;
   unlockApp: (pin: string) => boolean;
   setPinCode: (pin: string | null) => void;
   deleteAccount: () => void;
   exportData: () => void;
+  exportJournalMarkdown: () => void;
   importData: (json: string) => void;
   preselectedGoalId: string | null;
   setPreselectedGoalId: (id: string | null) => void;
@@ -266,8 +271,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           );
           
           if (habitsToNudge.length > 0) {
-            const title = `${phase} Ritual Window`;
-            const msg = `You have ${habitsToNudge.length} routine${habitsToNudge.length > 1 ? 's' : ''} to complete. Ready to evolve?`;
+            const title = `${phase} Routine`;
+            const msg = `You have ${habitsToNudge.length} habit${habitsToNudge.length > 1 ? 's' : ''} planned for this ${phase.toLowerCase()}.`;
             
             triggerNotification(title, msg, 'reminder');
             sendSystemNotification(title, { body: msg });
@@ -327,83 +332,238 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [state.language]);
 
   const addGoal = (goal: Goal) => {
-    const newState = { ...state, goals: [{ ...goal, lastUpdated: Date.now() }, ...state.goals] };
-    setState(newState);
-    triggerAutoSync(newState);
+    setState(prev => {
+      const newState = { ...prev, goals: [{ ...goal, lastUpdated: Date.now() }, ...prev.goals] };
+      triggerAutoSync(newState);
+      return newState;
+    });
   };
   const updateGoal = (id: string, updates: Partial<Goal>) => {
-    const newState = { ...state, goals: state.goals.map(g => g.id === id ? { ...g, ...updates, lastUpdated: Date.now() } : g) };
-    setState(newState);
-    triggerAutoSync(newState);
+    setState(prev => {
+      const newState = { ...prev, goals: prev.goals.map(g => g.id === id ? { ...g, ...updates, lastUpdated: Date.now() } : g) };
+      triggerAutoSync(newState);
+      return newState;
+    });
   };
   const deleteGoal = (id: string) => {
-    const newState = { 
-      ...state, 
-      goals: state.goals.filter(g => g.id !== id),
-      deletedIds: { ...state.deletedIds, goals: [...(state.deletedIds?.goals || []), id] }
-    };
-    setState(newState);
-    triggerAutoSync(newState);
+    setState(prev => {
+      const newState = { 
+        ...prev, 
+        goals: prev.goals.filter(g => g.id !== id),
+        deletedIds: { ...prev.deletedIds, goals: [...(prev.deletedIds?.goals || []), id] }
+      };
+      triggerAutoSync(newState);
+      return newState;
+    });
   };
 
   const addHabit = (habit: Omit<Habit, 'createdAt' | 'daysOfWeek'> & { createdAt?: string; daysOfWeek?: number[] }) => {
-    const newHabit: Habit = {
-      ...habit,
-      createdAt: habit.createdAt || new Date().toISOString(),
-      daysOfWeek: habit.daysOfWeek || [0, 1, 2, 3, 4, 5, 6],
-      lastUpdated: Date.now()
-    } as Habit;
-    const newState = { ...state, habits: [newHabit, ...state.habits] };
-    setState(newState);
-    triggerAutoSync(newState);
+    setState(prev => {
+      const daysOfWeek = habit.daysOfWeek || [0, 1, 2, 3, 4, 5, 6];
+      const completedDates = habit.completedDates || [];
+      const { currentStreak } = calculateHabitStreak(completedDates, daysOfWeek);
+      const newHabit: Habit = {
+        ...habit,
+        createdAt: habit.createdAt || new Date().toISOString(),
+        daysOfWeek,
+        completedDates,
+        streak: currentStreak,
+        lastUpdated: Date.now()
+      } as Habit;
+      const newState = { ...prev, habits: [newHabit, ...prev.habits] };
+      triggerAutoSync(newState);
+      return newState;
+    });
   };
   const updateHabit = (id: string, updates: Partial<Habit>) => {
-    const newState = { ...state, habits: state.habits.map(h => h.id === id ? { ...h, ...updates, lastUpdated: Date.now() } : h) };
-    setState(newState);
-    triggerAutoSync(newState);
+    setState(prev => {
+      const newState = { 
+        ...prev, 
+        habits: prev.habits.map(h => {
+          if (h.id === id) {
+            const updated = { ...h, ...updates, lastUpdated: Date.now() };
+            if (updates.completedDates || updates.daysOfWeek) {
+              const { currentStreak } = calculateHabitStreak(updated.completedDates, updated.daysOfWeek);
+              updated.streak = currentStreak;
+            }
+            return updated;
+          }
+          return h;
+        }) 
+      };
+      triggerAutoSync(newState);
+      return newState;
+    });
   };
   const deleteHabit = (id: string) => {
-    const newState = { 
-      ...state, 
-      habits: state.habits.filter(h => h.id !== id),
-      deletedIds: { ...state.deletedIds, habits: [...(state.deletedIds?.habits || []), id] }
-    };
-    setState(newState);
-    triggerAutoSync(newState);
+    setState(prev => {
+      const newState = { 
+        ...prev, 
+        habits: prev.habits.filter(h => h.id !== id),
+        deletedIds: { ...prev.deletedIds, habits: [...(prev.deletedIds?.habits || []), id] }
+      };
+      triggerAutoSync(newState);
+      return newState;
+    });
   };
   
   const toggleHabitCompletion = (id: string, date: string) => {
-    const updatedHabits = state.habits.map(h => {
-      if (h.id === id) {
-        const completed = h.completedDates.includes(date);
-        const newDates = completed ? h.completedDates.filter(d => d !== date) : [...h.completedDates, date];
-        return { ...h, completedDates: newDates, streak: completed ? Math.max(0, h.streak - 1) : h.streak + 1, lastUpdated: Date.now() };
-      }
-      return h;
+    let earnedRewardMessage: { title: string; amount: number; unit: string } | null = null;
+    setState(prev => {
+      const updatedHabits = prev.habits.map(h => {
+        if (h.id === id) {
+          const completed = h.completedDates.includes(date);
+          const newDates = completed ? h.completedDates.filter(d => d !== date) : [...h.completedDates, date];
+          const { currentStreak } = calculateHabitStreak(newDates, h.daysOfWeek);
+          
+          let updatedReward = h.reward;
+          if (h.reward && h.reward.amount > 0) {
+            if (!completed) {
+              // Just completed habit -> earn reward!
+              const earnAmt = h.reward.amount;
+              updatedReward = {
+                ...h.reward,
+                bankedBalance: (h.reward.bankedBalance || 0) + earnAmt,
+                totalEarned: (h.reward.totalEarned || 0) + earnAmt
+              };
+              earnedRewardMessage = {
+                title: h.reward.title,
+                amount: earnAmt,
+                unit: h.reward.unit
+              };
+            } else {
+              // Unchecking habit -> remove banked reward safely
+              const earnAmt = h.reward.amount;
+              updatedReward = {
+                ...h.reward,
+                bankedBalance: Math.max(0, (h.reward.bankedBalance || 0) - earnAmt),
+                totalEarned: Math.max(0, (h.reward.totalEarned || 0) - earnAmt)
+              };
+            }
+          }
+
+          return { 
+            ...h, 
+            completedDates: newDates, 
+            streak: currentStreak, 
+            reward: updatedReward,
+            lastUpdated: Date.now() 
+          };
+        }
+        return h;
+      });
+      const newState = { ...prev, habits: updatedHabits };
+      triggerAutoSync(newState);
+      return newState;
     });
-    const newState = { ...state, habits: updatedHabits };
-    setState(newState);
-    triggerAutoSync(newState);
+
+    if (earnedRewardMessage) {
+      const rewardInfo = earnedRewardMessage as { title: string; amount: number; unit: string };
+      const msg = `+${rewardInfo.amount} ${rewardInfo.unit} of ${rewardInfo.title} banked!`;
+      triggerNotification('Reward Earned 🎁', msg, 'achievement');
+    }
+  };
+
+  const redeemHabitReward = (habitId: string, amount?: number) => {
+    let redeemedInfo: { title: string; amount: number; unit: string } | null = null;
+    setState(prev => {
+      const updatedHabits = prev.habits.map(h => {
+        if (h.id === habitId && h.reward) {
+          const available = h.reward.bankedBalance || 0;
+          const toDeduct = amount !== undefined ? amount : available;
+          const actualDeduct = Math.min(available, Math.max(0, toDeduct));
+          if (actualDeduct <= 0) return h;
+
+          redeemedInfo = {
+            title: h.reward.title,
+            amount: actualDeduct,
+            unit: h.reward.unit
+          };
+
+          return {
+            ...h,
+            reward: {
+              ...h.reward,
+              bankedBalance: Math.max(0, available - actualDeduct),
+              totalRedeemed: (h.reward.totalRedeemed || 0) + actualDeduct
+            },
+            lastUpdated: Date.now()
+          };
+        }
+        return h;
+      });
+
+      const newState = { ...prev, habits: updatedHabits };
+      triggerAutoSync(newState);
+      return newState;
+    });
+
+    if (redeemedInfo) {
+      const info = redeemedInfo as { title: string; amount: number; unit: string };
+      triggerNotification(
+        'Guilt-Free Time Enjoyed ✨', 
+        `Enjoyed ${info.amount} ${info.unit} of ${info.title}. You earned every bit of it.`, 
+        'motivation'
+      );
+    }
   };
 
   const addJournalEntry = (entry: JournalEntry) => {
-    const newState = { ...state, journalEntries: [{ ...entry, lastUpdated: Date.now() }, ...state.journalEntries] };
-    setState(newState);
-    triggerAutoSync(newState);
+    setState(prev => {
+      const newState = { ...prev, journalEntries: [{ ...entry, lastUpdated: Date.now() }, ...prev.journalEntries] };
+      triggerAutoSync(newState);
+      return newState;
+    });
   };
   const updateJournalEntry = (id: string, updates: Partial<JournalEntry>) => {
-    const newState = { ...state, journalEntries: state.journalEntries.map(e => e.id === id ? { ...e, ...updates, lastUpdated: Date.now() } : e) };
-    setState(newState);
-    triggerAutoSync(newState);
+    setState(prev => {
+      const newState = { ...prev, journalEntries: prev.journalEntries.map(e => e.id === id ? { ...e, ...updates, lastUpdated: Date.now() } : e) };
+      triggerAutoSync(newState);
+      return newState;
+    });
   };
   const deleteJournalEntry = (id: string) => {
-    const newState = { 
-      ...state, 
-      journalEntries: state.journalEntries.filter(e => e.id !== id),
-      deletedIds: { ...state.deletedIds, journalEntries: [...(state.deletedIds?.journalEntries || []), id] }
-    };
-    setState(newState);
-    triggerAutoSync(newState);
+    setState(prev => {
+      const newState = { 
+        ...prev, 
+        journalEntries: prev.journalEntries.filter(e => e.id !== id),
+        deletedIds: { ...prev.deletedIds, journalEntries: [...(prev.deletedIds?.journalEntries || []), id] }
+      };
+      triggerAutoSync(newState);
+      return newState;
+    });
+  };
+
+  const saveWeeklyReview = (review: WeeklyReview, postToJournal: boolean = false) => {
+    setState(prev => {
+      let updatedJournal = prev.journalEntries;
+      if (postToJournal) {
+        const journalTitle = `Weekly Reflection (${review.weekStartDate} – ${review.weekEndDate})`;
+        const exists = prev.journalEntries.some(j => j.title === journalTitle);
+        if (!exists) {
+          const entry: JournalEntry = {
+            id: 'review-' + Date.now().toString(),
+            date: toLocalDateString(),
+            title: journalTitle,
+            category: 'Growth',
+            content: `Weekly Review Summary:\n\n• Habits: ${review.habitsDone}/${review.habitsTotal} completed (${review.completionRate}% consistency)\n• Wins:\n${review.wins.length > 0 ? review.wins.map(w => `  - ${w}`).join('\n') : '  - Quiet, steady progress'}\n• Focus for Next Week: ${review.upcomingFocus}\n${review.suggestedAdjustment ? `• Suggested Adjustment: ${review.suggestedAdjustment}\n` : ''}${review.reflection ? `\nNotes:\n${review.reflection}` : ''}`,
+            prompt: 'Sunday Weekly Review',
+            mood: review.completionRate >= 70 ? 'Great' : 'Good',
+            activities: ['reflection', 'weekly-review'],
+            lastUpdated: Date.now()
+          };
+          updatedJournal = [entry, ...prev.journalEntries];
+        }
+      }
+
+      const newState = {
+        ...prev,
+        lastWeeklyReview: review,
+        journalEntries: updatedJournal
+      };
+      triggerAutoSync(newState);
+      return newState;
+    });
   };
 
   const updateUserPreferences = (prefs: Partial<UserState>) => setState(s => ({ ...s, ...prefs }));
@@ -433,6 +593,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     a.href = url;
     a.download = `lumina_backup_${new Date().toISOString().split('T')[0]}.json`;
     a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportJournalMarkdown = () => {
+    let md = `# Lumina Journal Export\nExported on ${new Date().toLocaleDateString()}\n\n---\n\n`;
+    state.journalEntries.forEach(entry => {
+      const dateStr = entry.date ? new Date(entry.date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : '';
+      md += `## ${entry.title || 'Daily Note'} — ${dateStr}\n`;
+      md += `**Folder:** ${entry.category || 'Daily'} | **Energy:** ${entry.mood}\n\n`;
+      md += `${entry.content}\n\n`;
+      if (entry.aiInsight) {
+        md += `> *Observation:* ${entry.aiInsight}\n\n`;
+      }
+      md += `---\n\n`;
+    });
+
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `lumina_journal_${new Date().toISOString().split('T')[0]}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const importData = (json: string) => {
@@ -549,14 +732,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     updateHabit,
     deleteHabit,
     toggleHabitCompletion,
+    redeemHabitReward,
     addJournalEntry,
     updateJournalEntry,
     deleteJournalEntry,
+    saveWeeklyReview,
     updateUserPreferences,
     unlockApp,
     setPinCode,
     deleteAccount,
     exportData,
+    exportJournalMarkdown,
     importData,
     preselectedGoalId,
     setPreselectedGoalId,

@@ -3,11 +3,14 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useApp } from '../context/AppContext';
 import { 
     Check, Sun, Moon, Clock, Sparkles, Trophy, 
-    ChevronDown, ChevronUp, Zap, Star, Plus, X, ArrowRight, ArrowLeft, Loader2, Coffee, Sunset, Target, Play, Pencil, Trash2, RefreshCw, Flame, Cloud, CloudOff, History, Calendar, Tag, HelpCircle, Heart, Briefcase, Smile, BookOpen, Users, CheckCircle2
+    ChevronDown, ChevronUp, Zap, Star, Plus, X, ArrowRight, ArrowLeft, Loader2, Coffee, Sunset, Target, Play, Pencil, Trash2, RefreshCw, Flame, Cloud, CloudOff, History, Calendar, Tag, HelpCircle, Heart, Briefcase, Smile, BookOpen, Users, CheckCircle2, Gift, Gamepad2
 } from 'lucide-react';
 import { generateDailyBriefing, suggestAtomicHabit } from '../services/geminiService';
-import { Habit, GoalCategory } from '../types';
+import { Habit, GoalCategory, HabitReward } from '../types';
 import { toLocalDateString, parseLocalDate } from '../services/date';
+import { calculateHabitStreak } from '../services/habitService';
+import { WeeklyReviewCard } from '../components/WeeklyReviewCard';
+import { BankedRewardsCard } from '../components/BankedRewardsCard';
 
 interface DashboardProps {
     setView: (view: string) => void;
@@ -80,6 +83,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
     const [monthlyDays, setMonthlyDays] = useState<number[]>([]);
     const [habitWizardStep, setHabitWizardStep] = useState<number>(1);
     const [showTriggerTooltip, setShowTriggerTooltip] = useState<boolean>(false);
+    const [quickHabitTitle, setQuickHabitTitle] = useState<string>('');
+
+    // Temptation Bundling (Premack Principle) Reward State
+    const [hasReward, setHasReward] = useState<boolean>(false);
+    const [rewardTitle, setRewardTitle] = useState<string>('Gaming');
+    const [rewardAmount, setRewardAmount] = useState<number>(30);
+    const [rewardUnit, setRewardUnit] = useState<string>('min');
+    const [targetAmount, setTargetAmount] = useState<string>('');
+    const [targetUnit, setTargetUnit] = useState<string>('pages');
 
     useEffect(() => {
         const interval = setInterval(() => {
@@ -214,6 +226,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
         setMonthlyDays([]);
         setHabitWizardStep(1);
         setShowTriggerTooltip(false);
+        setHasReward(false);
+        setRewardTitle('Gaming');
+        setRewardAmount(30);
+        setRewardUnit('min');
+        setTargetAmount('');
+        setTargetUnit('pages');
         setShowHabitModal(false);
     };
 
@@ -230,6 +248,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
         setMonthlyDays(h.monthlyDays || []);
         setHabitWizardStep(1);
         setShowTriggerTooltip(false);
+        if (h.reward) {
+            setHasReward(true);
+            setRewardTitle(h.reward.title || 'Gaming');
+            setRewardAmount(h.reward.amount || 30);
+            setRewardUnit(h.reward.unit || 'min');
+        } else {
+            setHasReward(false);
+            setRewardTitle('Gaming');
+            setRewardAmount(30);
+            setRewardUnit('min');
+        }
+        setTargetAmount(h.targetAmount ? String(h.targetAmount) : '');
+        setTargetUnit(h.targetUnit || 'pages');
         setShowHabitModal(true);
     };
 
@@ -241,6 +272,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
             ? (habitDays.length > 0 ? habitDays : [0, 1, 2, 3, 4, 5, 6])
             : [];
 
+        const existingHabit = editingHabitId ? habits.find(h => h.id === editingHabitId) : null;
+        const parsedTargetAmount = targetAmount ? parseFloat(targetAmount) : undefined;
+
+        let rewardPayload: HabitReward | undefined = undefined;
+        if (hasReward && rewardTitle.trim() && rewardAmount > 0) {
+            rewardPayload = {
+                title: rewardTitle.trim(),
+                amount: rewardAmount,
+                unit: rewardUnit.trim() || 'min',
+                bankedBalance: existingHabit?.reward?.bankedBalance || 0,
+                totalEarned: existingHabit?.reward?.totalEarned || 0,
+                totalRedeemed: existingHabit?.reward?.totalRedeemed || 0
+            };
+        }
+
         const payload = {
             title: habitTitle.trim(),
             category: habitCategory,
@@ -250,12 +296,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
             daysOfWeek: effectiveDays,
             monthlyDays: scheduleType === 'monthly' ? monthlyDays : [],
             scheduleType,
-            linkedGoalId: linkedGoalId || undefined
+            linkedGoalId: linkedGoalId || undefined,
+            targetAmount: parsedTargetAmount,
+            targetUnit: parsedTargetAmount ? targetUnit : undefined,
+            reward: rewardPayload
         };
 
         if (editingHabitId) {
             updateHabit(editingHabitId, payload);
-            triggerNotification('Ritual Updated', `"${payload.title}" has been saved.`, 'achievement');
+            triggerNotification('Habit Updated', `"${payload.title}" has been saved.`, 'achievement');
         } else {
             addHabit({
                 id: Date.now().toString(),
@@ -264,7 +313,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                 completedDates: [],
                 createdAt: new Date().toISOString()
             });
-            triggerNotification('Ritual Activated ✨', `"${payload.title}" has been added to your routine.`, 'achievement');
+            triggerNotification('Habit Saved ✨', `"${payload.title}" has been added to your habits.`, 'achievement');
         }
 
         // Align active dashboard tab so the user sees their new ritual immediately
@@ -280,6 +329,27 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
             deleteHabit(editingHabitId);
             resetHabitForm();
         }
+    };
+
+    const handleQuickAddHabit = (e: React.FormEvent) => {
+        e.preventDefault();
+        const trimmed = quickHabitTitle.trim();
+        if (!trimmed) return;
+
+        addHabit({
+            id: Date.now().toString(),
+            title: trimmed,
+            category: GoalCategory.Personal,
+            duration: '5m',
+            timeOfDay: activeHabitTab,
+            daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+            streak: 0,
+            completedDates: [],
+            createdAt: new Date().toISOString()
+        });
+
+        triggerNotification('Habit Saved ✨', `"${trimmed}" added for ${activeHabitTab}.`, 'achievement');
+        setQuickHabitTitle('');
     };
 
     const filteredHabits = habitsForDay.filter(h => h.timeOfDay === activeHabitTab);
@@ -346,7 +416,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
         if (habits.length === 0) {
             return (
                 <div className="w-full bg-white/5 backdrop-blur-md rounded-[2rem] p-4 flex items-center justify-center text-white/70 border border-white/5">
-                    <span className="text-xs font-medium tracking-wide">Waiting for your first ritual</span>
+                    <span className="text-xs font-medium tracking-wide">Ready for your first habit</span>
                 </div>
             );
         }
@@ -356,7 +426,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
             return (
                 <div className="w-full bg-white/5 backdrop-blur-md rounded-[2rem] p-4 flex items-center justify-center text-white/70 border border-white/5">
                     <Calendar className="mr-2 opacity-50" size={14} />
-                    <span className="text-xs font-medium tracking-wide">No rituals scheduled for {dayName}</span>
+                    <span className="text-xs font-medium tracking-wide">No habits scheduled for {dayName}</span>
                 </div>
             );
         }
@@ -364,7 +434,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
         return (
             <div className="w-full bg-white/5 backdrop-blur-md rounded-[2rem] p-4 flex items-center justify-center text-white/80 border border-white/5">
                 <Check className="mr-2 opacity-70" size={16} strokeWidth={2.5} />
-                <span className="text-xs font-semibold tracking-wide">Rituals Complete</span>
+                <span className="text-xs font-semibold tracking-wide">All Habits Completed ✨</span>
             </div>
         );
     };
@@ -440,19 +510,51 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                     </div>
                 )}
 
+                {/* SUNDAY WEEKLY REVIEW */}
+                <WeeklyReviewCard />
+
                 {/* RITUAL NAVIGATOR */}
                 <div className="space-y-4">
                     <div className="flex justify-between items-center px-1">
                         <div className="flex items-center gap-3">
-                            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Ritual Stacks</h3>
+                            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Daily Habits</h3>
                             <button onClick={() => setIsMomentumOpen(!isMomentumOpen)} className={`p-1.5 rounded-lg transition-all ${isMomentumOpen ? themeClasses.secondary + ' ' + themeClasses.text : 'text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
                                 <History size={14} />
                             </button>
                         </div>
-                        <button onClick={() => { setEditingHabitId(null); setShowHabitModal(true); }} className={`${themeClasses.text} p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors`}>
+                        <button onClick={() => { setEditingHabitId(null); setShowHabitModal(true); }} className={`${themeClasses.text} p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors`} title="Habit Builder">
                             <Plus size={18} strokeWidth={2.5} />
                         </button>
                     </div>
+
+                    {/* QUICK ADD HABIT (1-TAP ZERO FRICTION) */}
+                    <form onSubmit={handleQuickAddHabit} className="flex items-center gap-2 px-1">
+                        <div className="relative flex-1">
+                            <input 
+                                type="text"
+                                value={quickHabitTitle}
+                                onChange={e => setQuickHabitTitle(e.target.value)}
+                                placeholder={`+ Quick add habit for ${activeHabitTab}...`}
+                                className="w-full bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 rounded-2xl px-4 py-2.5 text-xs text-slate-800 dark:text-white placeholder:text-slate-400 outline-none focus:border-indigo-500 shadow-sm transition-colors"
+                            />
+                            {quickHabitTitle && (
+                                <button 
+                                    type="button" 
+                                    onClick={() => setQuickHabitTitle('')} 
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                >
+                                    <X size={12} />
+                                </button>
+                            )}
+                        </div>
+                        <button 
+                            type="submit" 
+                            disabled={!quickHabitTitle.trim()} 
+                            className={`px-4 py-2.5 rounded-2xl text-xs font-semibold uppercase tracking-wider text-white shadow-sm disabled:opacity-40 transition-all bg-gradient-to-br ${themeClasses.gradient} shrink-0 active:scale-95`}
+                        >
+                            Add
+                        </button>
+                    </form>
 
                     {isMomentumOpen && (
                         <div className="bg-slate-50/50 dark:bg-slate-800/30 rounded-[2.5rem] p-4 border border-slate-100 dark:border-slate-700/50 animate-in slide-in-from-top-2">
@@ -493,12 +595,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                         {filteredHabits.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-12 text-slate-400 gap-3 border border-dashed border-slate-200 dark:border-slate-800 rounded-[2.5rem]">
                                 <Calendar size={24} className="opacity-30" />
-                                <p className="text-xs font-medium text-slate-400 text-center">No rituals scheduled</p>
-                                <button onClick={() => { setEditingHabitId(null); setHabitTime(activeHabitTab); setShowHabitModal(true); }} className={`text-xs font-semibold ${themeClasses.text}`}>Schedule One</button>
+                                <p className="text-xs font-medium text-slate-400 text-center">No habits scheduled</p>
+                                <button onClick={() => { setEditingHabitId(null); setHabitTime(activeHabitTab); setShowHabitModal(true); }} className={`text-xs font-semibold ${themeClasses.text}`}>Add a Habit</button>
                             </div>
                         ) : (
                             filteredHabits.map(h => {
                                 const isDone = h.completedDates.includes(selectedDate);
+                                const streakInfo = calculateHabitStreak(h.completedDates, h.daysOfWeek, selectedDate);
+                                const showRecoveryBadge = streakInfo.canRecoverToday && !isDone && selectedDate === currentTodayStr;
+
                                 return (
                                     <div key={h.id} className={`bg-white dark:bg-slate-800/90 p-4 rounded-[2rem] border transition-all flex items-center group ${isDone ? 'opacity-50 border-transparent bg-slate-50/50 dark:bg-slate-800/40' : 'border-slate-100 dark:border-slate-700 shadow-sm'}`}>
                                         <div className="min-w-0 flex-1">
@@ -506,15 +611,33 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                                                 <h4 className={`font-semibold text-sm leading-snug ${isDone ? 'text-slate-400 line-through' : 'text-slate-800 dark:text-white'}`}>{h.title}</h4>
                                                 <button onClick={() => handleEditHabit(h)} className="opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-indigo-500 transition-all ml-1"><Pencil size={12} /></button>
                                             </div>
-                                            <div className="flex items-center gap-3">
+                                            <div className="flex items-center gap-2.5 flex-wrap">
                                                 <div className="flex items-center gap-1">
                                                     <Flame size={12} className={isDone ? 'text-slate-300' : 'text-orange-500'} />
-                                                    <span className={`text-xs font-semibold ${isDone ? 'text-slate-400' : 'text-orange-500'}`}>{h.streak}d streak</span>
+                                                    <span className={`text-xs font-semibold ${isDone ? 'text-slate-400' : 'text-orange-500'}`}>{streakInfo.currentStreak}d streak</span>
                                                 </div>
                                                 <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700/60 border border-slate-200 dark:border-slate-600/50">
                                                     <Tag size={9} className="text-slate-400" />
                                                     <span className="text-[10px] font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">{h.category}</span>
                                                 </div>
+                                                {showRecoveryBadge && (
+                                                    <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20 flex items-center gap-1 animate-pulse">
+                                                        <Zap size={9} /> Never miss twice: do today
+                                                    </span>
+                                                )}
+                                                {h.reward && (
+                                                    <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-medium transition-colors ${
+                                                        (h.reward.bankedBalance || 0) > 0 
+                                                            ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20' 
+                                                            : 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border-indigo-200/50 dark:border-indigo-800/50'
+                                                    }`}>
+                                                        <Gift size={9} />
+                                                        <span>+{h.reward.amount}{h.reward.unit} {h.reward.title}</span>
+                                                        {(h.reward.bankedBalance || 0) > 0 && (
+                                                            <span className="font-bold">({h.reward.bankedBalance} ready)</span>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                         <button onClick={() => toggleHabitCompletion(h.id, selectedDate)} className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all shrink-0 ml-4 ${isDone ? `${themeClasses.primary} text-white shadow-md` : 'bg-slate-50 dark:bg-slate-700 text-slate-300 border border-slate-100 dark:border-slate-600 shadow-sm'}`}>
@@ -527,20 +650,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                     </div>
                 </div>
 
+                {/* GUILT-FREE REWARDS / BANKED TREATS (PREMACK PRINCIPLE) */}
+                <BankedRewardsCard onOpenHabitModal={() => { setEditingHabitId(null); setShowHabitModal(true); setHabitWizardStep(4); }} />
+
                 <div className="grid grid-cols-2 gap-4">
                     <div onClick={() => setView('insights')} className="bg-white dark:bg-slate-800/90 p-5 rounded-[2rem] border border-slate-100 dark:border-slate-700 cursor-pointer active:scale-95 transition-all flex flex-col gap-2.5 shadow-sm hover:shadow-md">
                         <div className="flex justify-between items-start">
                             <div className={`w-8 h-8 rounded-xl ${themeClasses.secondary} ${themeClasses.text} flex items-center justify-center shadow-inner`}><Star size={16} fill="currentColor" /></div>
                             <span className={`text-base font-bold ${themeClasses.text}`}>{progress}%</span>
                         </div>
-                        <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-200 tracking-wide">Growth Momentum</h3>
+                        <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-200 tracking-wide">Daily Consistency</h3>
                     </div>
                     <div onClick={() => setView('goals')} className="bg-white dark:bg-slate-800/90 p-5 rounded-[2rem] border border-slate-100 dark:border-slate-700 cursor-pointer active:scale-95 transition-all flex flex-col gap-2.5 shadow-sm hover:shadow-md">
                         <div className="flex justify-between items-start">
                             <div className={`w-8 h-8 rounded-xl ${themeClasses.secondary} ${themeClasses.text} flex items-center justify-center shadow-inner`}><Trophy size={16} /></div>
                             <span className={`text-base font-bold ${themeClasses.text}`}>{goals.length}</span>
                         </div>
-                        <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-200 tracking-wide">Active Paths</h3>
+                        <h3 className="text-xs font-semibold text-slate-700 dark:text-slate-200 tracking-wide">Active Goals</h3>
                     </div>
                 </div>
             </div>
@@ -559,11 +685,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                                     </span>
                                     <span className="text-slate-300 dark:text-slate-700">•</span>
                                     <span className={`text-[11px] font-semibold tracking-wide ${themeClasses.text}`}>
-                                        {habitWizardStep === 1 ? 'Habit Loop' : habitWizardStep === 2 ? 'Life Domain' : habitWizardStep === 3 ? 'Routine Cadence' : 'Goal Alignment'}
+                                        {habitWizardStep === 1 ? 'Habit Loop' : habitWizardStep === 2 ? 'Category' : habitWizardStep === 3 ? 'Schedule & Time' : 'Connect to Goal'}
                                     </span>
                                 </div>
                                 <h2 className="text-lg sm:text-xl font-bold tracking-tight text-slate-800 dark:text-white mt-0.5">
-                                    {editingHabitId ? 'Refine Ritual' : 'Craft Ritual'}
+                                    {editingHabitId ? 'Edit Habit' : 'New Habit'}
                                 </h2>
                             </div>
                             <button 
@@ -578,9 +704,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                         <div className="grid grid-cols-4 gap-2 pt-3 pb-2">
                             {[
                                 { step: 1, label: 'Loop' },
-                                { step: 2, label: 'Domain' },
-                                { step: 3, label: 'Cadence' },
-                                { step: 4, label: 'Align' }
+                                { step: 2, label: 'Category' },
+                                { step: 3, label: 'Timing' },
+                                { step: 4, label: 'Goal' }
                             ].map(item => {
                                 const isCurrent = habitWizardStep === item.step;
                                 const isPassed = habitWizardStep > item.step;
@@ -639,10 +765,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                                                 <div className="absolute right-0 top-7 w-64 bg-slate-900 text-white p-3.5 rounded-2xl shadow-2xl border border-slate-700/80 z-30 animate-in fade-in zoom-in-95 text-xs">
                                                     <div className="flex items-center gap-1.5 font-semibold text-emerald-400 text-xs mb-1">
                                                         <Sparkles size={13} />
-                                                        <span>The Habit Stacking Formula</span>
+                                                        <span>Habit Stacking</span>
                                                     </div>
                                                     <p className="text-[11px] text-slate-300 leading-relaxed font-normal">
-                                                        Attaching a new action to an established cue (like <em>pouring morning coffee</em>) taps into existing neural pathways, removing 80% of willpower resistance.
+                                                        Anchoring a new habit to an existing routine (like <em>pouring morning coffee</em>) makes it natural to remember and effortless to sustain.
                                                     </p>
                                                 </div>
                                             )}
@@ -687,7 +813,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                                                 type="button"
                                                 onClick={handleAtomize}
                                                 disabled={!habitTitle.trim() || isAtomizing}
-                                                title="Make this ritual bite-sized with AI"
+                                                title="Make this habit smaller with AI"
                                                 className={`absolute right-2.5 top-1/2 -translate-y-1/2 p-2 rounded-xl ${themeClasses.secondary} ${themeClasses.text} disabled:opacity-30 transition-all`}
                                             >
                                                 {isAtomizing ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
@@ -954,7 +1080,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                                     {/* Interactive Goal Sync Picker */}
                                     <div className="space-y-2">
                                         <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                                            Connected Journey
+                                            Connect to a Goal
                                         </span>
                                         <div className="space-y-2 max-h-40 overflow-y-auto no-scrollbar pr-1">
                                             <button
@@ -1015,11 +1141,137 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                                         </div>
                                     </div>
 
-                                    {/* Tactile Blueprint Preview */}
+                                    {/* OPTIONAL TEMPTATION BUNDLING / REWARD (PREMACK PRINCIPLE) */}
+                                    <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                                <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${hasReward ? `${themeClasses.primary} text-white` : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
+                                                    <Gift size={14} />
+                                                </div>
+                                                <div>
+                                                    <h4 className="text-xs font-semibold text-slate-800 dark:text-white flex items-center gap-1.5">
+                                                        <span>Guilt-Free Reward</span>
+                                                        <span className="text-[9px] uppercase tracking-wider text-indigo-500 dark:text-indigo-400 font-semibold bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.2 rounded-md">Premack Principle</span>
+                                                    </h4>
+                                                    <p className="text-[10px] text-slate-400 font-normal">
+                                                        Earn what you love after doing what matters
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setHasReward(!hasReward)}
+                                                className={`w-10 h-5 flex items-center rounded-full p-0.5 transition-colors ${
+                                                    hasReward ? themeClasses.primary : 'bg-slate-200 dark:bg-slate-700'
+                                                }`}
+                                            >
+                                                <div className={`bg-white w-4 h-4 rounded-full shadow-sm transform transition-transform ${
+                                                    hasReward ? 'translate-x-5' : 'translate-x-0'
+                                                }`} />
+                                            </button>
+                                        </div>
+
+                                        {hasReward && (
+                                            <div className="space-y-3 bg-slate-50/80 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700 animate-in fade-in duration-200">
+                                                {/* Quick Presets */}
+                                                <div>
+                                                    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                                                        Popular Pairings
+                                                    </span>
+                                                    <div className="flex flex-wrap gap-1.5 pt-1.5">
+                                                        {[
+                                                            { title: 'Gaming', amount: 30, unit: 'min', icon: '🎮' },
+                                                            { title: 'Netflix', amount: 1, unit: 'ep', icon: '🍿' },
+                                                            { title: 'Coffee Treat', amount: 1, unit: 'cup', icon: '☕' },
+                                                            { title: 'Social Media', amount: 15, unit: 'min', icon: '📱' },
+                                                            { title: 'Podcast Walk', amount: 30, unit: 'min', icon: '🎧' }
+                                                        ].map(preset => (
+                                                            <button
+                                                                key={preset.title}
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setRewardTitle(preset.title);
+                                                                    setRewardAmount(preset.amount);
+                                                                    setRewardUnit(preset.unit);
+                                                                }}
+                                                                className={`px-2 py-0.5 rounded-lg text-[11px] font-medium border transition-colors flex items-center gap-1 ${
+                                                                    rewardTitle === preset.title && rewardAmount === preset.amount
+                                                                        ? 'bg-indigo-500 text-white border-transparent shadow-xs'
+                                                                        : 'bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:border-indigo-400'
+                                                                }`}
+                                                            >
+                                                                <span>{preset.icon}</span>
+                                                                <span>{preset.amount}{preset.unit} {preset.title}</span>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                {/* Inputs: Habit Target (Optional) & Earned Reward */}
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                                                    {/* Habit Unit/Target (e.g. 20 pages) */}
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                                                            Habit Goal (optional)
+                                                        </label>
+                                                        <div className="flex gap-1.5">
+                                                            <input
+                                                                type="number"
+                                                                min="1"
+                                                                value={targetAmount}
+                                                                onChange={e => setTargetAmount(e.target.value)}
+                                                                placeholder="e.g. 20"
+                                                                className="w-16 bg-white dark:bg-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-slate-800 dark:text-white border border-slate-200 dark:border-slate-700 outline-none focus:ring-1 focus:ring-indigo-500"
+                                                            />
+                                                            <input
+                                                                type="text"
+                                                                value={targetUnit}
+                                                                onChange={e => setTargetUnit(e.target.value)}
+                                                                placeholder="pages, min, reps"
+                                                                className="flex-1 bg-white dark:bg-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-slate-800 dark:text-white border border-slate-200 dark:border-slate-700 outline-none focus:ring-1 focus:ring-indigo-500"
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Reward Earned */}
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                                                            Reward Earned
+                                                        </label>
+                                                        <div className="flex gap-1.5">
+                                                            <input
+                                                                type="number"
+                                                                min="1"
+                                                                value={rewardAmount}
+                                                                onChange={e => setRewardAmount(parseInt(e.target.value) || 0)}
+                                                                className="w-14 bg-white dark:bg-slate-800 rounded-xl px-2 py-1.5 text-xs text-slate-800 dark:text-white border border-slate-200 dark:border-slate-700 outline-none focus:ring-1 focus:ring-indigo-500"
+                                                            />
+                                                            <input
+                                                                type="text"
+                                                                value={rewardUnit}
+                                                                onChange={e => setRewardUnit(e.target.value)}
+                                                                placeholder="min"
+                                                                className="w-12 bg-white dark:bg-slate-800 rounded-xl px-1.5 py-1.5 text-xs text-slate-800 dark:text-white border border-slate-200 dark:border-slate-700 outline-none focus:ring-1 focus:ring-indigo-500"
+                                                            />
+                                                            <input
+                                                                type="text"
+                                                                value={rewardTitle}
+                                                                onChange={e => setRewardTitle(e.target.value)}
+                                                                placeholder="Gaming"
+                                                                className="flex-1 bg-white dark:bg-slate-800 rounded-xl px-2 py-1.5 text-xs text-slate-800 dark:text-white border border-slate-200 dark:border-slate-700 outline-none focus:ring-1 focus:ring-indigo-500"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Tactile Habit Summary Preview */}
                                     <div className="bg-slate-50 dark:bg-slate-800/80 rounded-2xl p-4 border border-slate-200 dark:border-slate-700 space-y-2 shadow-inner">
                                         <div className="flex items-center justify-between">
                                             <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                                                <Zap size={12} className="text-amber-500" /> Routine Blueprint
+                                                <Zap size={12} className="text-amber-500" /> Habit Blueprint
                                             </span>
                                             <span className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded-lg ${themeClasses.secondary} ${themeClasses.text}`}>
                                                 {habitDuration}
@@ -1032,7 +1284,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                                             ) : (
                                                 <span>I will </span>
                                             )}
-                                            <span className="font-bold text-slate-900 dark:text-white">{habitTitle || 'perform my ritual'}</span>.
+                                            <span className="font-bold text-slate-900 dark:text-white">
+                                                {habitTitle || 'complete this habit'}
+                                                {hasReward && targetAmount ? ` (${targetAmount} ${targetUnit})` : ''}
+                                            </span>.
+                                            {hasReward && rewardTitle && (
+                                                <span className="text-emerald-600 dark:text-emerald-400 font-semibold block mt-1">
+                                                    Then I enjoy {rewardAmount} {rewardUnit} of {rewardTitle} guilt-free.
+                                                </span>
+                                            )}
                                         </p>
 
                                         <div className="flex flex-wrap gap-1.5 pt-1 text-[10px]">
@@ -1045,6 +1305,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                                             <span className="bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded-lg border border-slate-200 dark:border-slate-600 font-medium">
                                                 📅 {scheduleSummary}
                                             </span>
+                                            {hasReward && rewardTitle && (
+                                                <span className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-lg border border-emerald-200 dark:border-emerald-800 font-semibold flex items-center gap-1">
+                                                    🎁 +{rewardAmount}{rewardUnit} {rewardTitle}
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -1071,7 +1336,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                                             className={`flex-1 bg-gradient-to-br ${themeClasses.gradient} text-white py-3 rounded-2xl font-semibold text-xs tracking-wide shadow-md transition-all active:scale-[0.98] disabled:opacity-40 flex items-center justify-center gap-2`}
                                         >
                                             <span>
-                                                {habitWizardStep === 1 ? 'Next: Life Domain' : habitWizardStep === 2 ? 'Next: Cadence & Timing' : 'Next: Goal Alignment'}
+                                                {habitWizardStep === 1 ? 'Next: Category' : habitWizardStep === 2 ? 'Next: Timing' : 'Next: Connect Goal'}
                                             </span>
                                             <ArrowRight size={15} />
                                         </button>
@@ -1086,7 +1351,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                                             className={`flex-1 bg-gradient-to-br ${themeClasses.gradient} text-white py-3.5 rounded-2xl font-semibold text-xs tracking-wide shadow-md hover:shadow-lg transition-all active:scale-[0.98] disabled:opacity-40 flex items-center justify-center gap-2`}
                                         >
                                             <Sparkles size={15} />
-                                            <span>{editingHabitId ? 'Refine Ritual' : 'Deploy Ritual'}</span>
+                                            <span>{editingHabitId ? 'Save Changes' : 'Save Habit'}</span>
                                         </button>
                                     )}
                                 </div>
@@ -1097,7 +1362,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                                         onClick={handleDeleteHabit}
                                         className="w-full py-2 text-xs font-medium text-rose-500 hover:text-rose-600 flex items-center justify-center gap-1.5 transition-all opacity-80 hover:opacity-100"
                                     >
-                                        <Trash2 size={13} /> Delete Ritual
+                                        <Trash2 size={13} /> Delete Habit
                                     </button>
                                 )}
                             </div>

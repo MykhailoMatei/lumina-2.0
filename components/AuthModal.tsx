@@ -88,10 +88,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                 <div className="flex justify-between items-start mb-5 pt-1">
                     <div className="space-y-0.5">
                         <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
-                            {isSignUp ? 'Claim Map' : 'Welcome'}
+                            {isSignUp ? 'Create Account' : 'Welcome Back'}
                         </h2>
                         <p className="text-xs font-normal text-slate-400">
-                            {isSignUp ? 'Join your growth vault' : 'Resume evolution'}
+                            {isSignUp ? 'Sync your habits and reflections' : 'Sign in to sync your data'}
                         </p>
                     </div>
                     <button onClick={onClose} className="p-1.5 bg-slate-50 dark:bg-slate-800 rounded-full text-slate-400 hover:text-slate-600 transition-colors">
@@ -170,7 +170,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                         className={`w-full py-3 rounded-xl bg-gradient-to-br ${themeClasses.gradient} text-white font-semibold text-xs uppercase tracking-wider shadow-md flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50 mt-1`}
                     >
                         {loading ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} strokeWidth={2.5} />}
-                        {isSignUp ? 'Create Vault' : 'Secure Entry'}
+                        {isSignUp ? 'Create Account' : 'Sign In'}
                     </button>
                 </form>
 
@@ -179,8 +179,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                         onClick={() => setIsSignUp(!isSignUp)}
                         className={`text-xs font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-all flex flex-col items-center gap-0.5 mx-auto`}
                     >
-                        <span>{isSignUp ? 'Existing Traveler?' : 'New to Lumina?'}</span>
-                        <span className={`${themeClasses.text} font-semibold`}>{isSignUp ? 'Sign In Instead' : 'Join the Collective'}</span>
+                        <span>{isSignUp ? 'Already have an account?' : 'New to Lumina?'}</span>
+                        <span className={`${themeClasses.text} font-semibold`}>{isSignUp ? 'Sign In Instead' : 'Create an Account'}</span>
                     </button>
                 </div>
 

@@ -83,13 +83,12 @@ async function startServer() {
     const isEarlyStage = goals.length <= 1 && habits.length === 0 && journal.length === 0;
 
     const prompt = `${getLangInstr(lang)} 
-    You are the "Lumina Growth Architect." You are a practical, high-performance coach.
+    You are Lumina, a thoughtful and grounded mentor for personal growth.
     
-    COACHING PHILOSOPHY:
-    1. AVOID: Ancient metaphors (mountains, rivers, monks, roots). 
-    2. VOICE: Intelligent, grounded in behavioral psychology, and actionable.
-    3. FOCUS: Systems over willpower. Environment over motivation.
-    4. STYLE: Minimalist, kind, but focused on data and trends.
+    GUIDELINES:
+    1. TONE: Warm, calm, concise, and encouraging. Avoid overly corporate jargon (no "operational efficiency", "cognitive load", "leverage", or "execution audit") and avoid vague pseudo-spiritual mysticism.
+    2. FOCUS: Clear observations based on habits, goals, and journal logs. Practical, realistic steps.
+    3. STYLE: Respectful, reflective, and human.
 
     USER DATA CONTEXT:
     Habits: ${JSON.stringify(habits.map((h: any) => ({ title: h.title, streak: h.streak, timeOfDay: h.timeOfDay })))}
@@ -98,13 +97,13 @@ async function startServer() {
 
     JSON OUTPUT:
     {
-      "summary": "Observation of current momentum and cognitive load.",
-      "correlation": "A link between daily systems and long-term targets.",
-      "advice": "Actionable adjustment based on behavioral science.",
-      "trajectory": "The logical next step in the user's evolution.",
-      "archetype": "Strategic Planner",
-      "happinessTrigger": "One specific win the user should leverage.",
-      "mentalThemes": ["Momentum", "Cognitive Load", "Systems"],
+      "summary": "Warm, encouraging observation of current habits and routines.",
+      "correlation": "A gentle connection between daily actions and long-term intentions.",
+      "advice": "A simple, doable suggestion for the coming days.",
+      "trajectory": "A realistic and positive look at current progress.",
+      "archetype": "Mindful Explorer",
+      "happinessTrigger": "One specific win or positive routine the user can build on.",
+      "mentalThemes": ["Consistency", "Balance", "Daily Focus"],
       "identityScores": [
           {"subject": "Health", "A": 50, "fullMark": 100},
           {"subject": "Career", "A": 50, "fullMark": 100},
@@ -129,12 +128,12 @@ async function startServer() {
       console.error('[Gemini growth-audit error]', e);
       // Graceful fallback matching original behavior
       res.json({
-        summary: 'Data patterns are stabilizing.',
-        correlation: 'Identifying leverage points.',
-        advice: 'Stick to the schedule.',
-        trajectory: 'Incremental progress.',
-        happinessTrigger: 'Your routine is your foundation.',
-        mentalThemes: ['Consistency'],
+        summary: 'Your daily patterns are steady.',
+        correlation: 'Your daily habits support your bigger intentions.',
+        advice: 'Take it one day at a time—consistency builds naturally.',
+        trajectory: 'Steady, calm progress.',
+        happinessTrigger: 'Your regular routines create a sense of calm.',
+        mentalThemes: ['Consistency', 'Balance'],
         identityScores: [
           { subject: 'Health', A: 50, fullMark: 100 },
           { subject: 'Career', A: 50, fullMark: 100 },
@@ -143,7 +142,7 @@ async function startServer() {
           { subject: 'Personal', A: 50, fullMark: 100 },
           { subject: 'Financial', A: 50, fullMark: 100 },
         ],
-        archetype: 'Systems Builder',
+        archetype: 'Mindful Explorer',
         isCalibrating: true,
       });
     }
@@ -151,21 +150,20 @@ async function startServer() {
 
   // 3. Daily Briefing
   app.post('/api/gemini/daily-briefing', async (req: Request, res: Response) => {
-    const { name = 'Growth Traveler', goals = [], habits = [], recentJournal = [], lang = 'English' } = req.body;
+    const { name = 'Friend', goals = [], habits = [], recentJournal = [], lang = 'English' } = req.body;
 
     const prompt = `${getLangInstr(lang)} 
-    You are a Modern Growth Mentor for ${name}. Your voice is grounded, practical, and focuses on behavioral science.
+    You are Lumina, a warm and grounded daily companion for ${name}.
     
     STRICT RULES:
-    1. NO ARCHAIC METAPHORS: Never use mountains, rivers, flowers, or ancient wisdom.
-    2. MODERN TONE: Use terms like 'friction', 'cognitive load', 'systems', 'leverage', and 'momentum'.
-    3. NO INFORMAL GREETINGS: Do not use "Hey," "Hi," or "I was thinking." Start with the insight.
-    4. ACTION-ORIENTED: The 'motivation' should be a practical truth about personal growth or psychology.
-    5. KEYSTONE TASK ('priorityTask'): Frame it as a 'High-Leverage Invitation'.
+    1. CALM & GROUNDED: Avoid corporate jargon (do NOT use "operational efficiency", "friction points", "cognitive load", or "tactical leverage").
+    2. AVOID MYSTICISM: Avoid grand cosmic or mystical metaphors.
+    3. CLEAR & ENCOURAGING: Keep thoughts concise, empathetic, and actionable.
+    4. FOCUS: Simple consistency, showing up, and enjoying the present day.
 
     ACTIVE TARGETS:
-    Goals: ${goals.slice(0, 3).map((g: any) => g.title).join(', ') || 'Personal mastery'}
-    Habits: ${habits.slice(0, 4).map((h: any) => h.title).join(', ') || 'Daily momentum'}
+    Goals: ${goals.slice(0, 3).map((g: any) => g.title).join(', ') || 'Personal growth'}
+    Habits: ${habits.slice(0, 4).map((h: any) => h.title).join(', ') || 'Daily routines'}
     Recent Mood: ${recentJournal?.[0]?.mood || 'Neutral'}
 
     JSON: { "motivation": "...", "focus": "...", "tip": "...", "journal_prompt": "...", "priorityTask": "..." }.`;
@@ -179,20 +177,20 @@ async function startServer() {
       });
       const data = JSON.parse(cleanJsonResponse(response.text || '{}'));
       res.json({
-        motivation: data.motivation || 'Success is the product of daily systems, not once-in-a-lifetime transformations.',
-        focus: data.focus || 'System Integrity',
-        tip: data.tip || 'Identify the point of greatest friction in your routine and resolve it.',
-        journalPrompt: data.journal_prompt || data.journalPrompt || 'What choice today saved you time or energy?',
-        priorityTask: data.priorityTask || 'Audit your current queue and eliminate one non-essential task.',
+        motivation: data.motivation || 'Small, consistent actions each day quietly add up to meaningful change.',
+        focus: data.focus || 'Daily Balance',
+        tip: data.tip || 'Make your next habit easy to start—even just two minutes builds momentum.',
+        journalPrompt: data.journal_prompt || data.journalPrompt || "What is one moment from today you'd like to remember?",
+        priorityTask: data.priorityTask || 'Choose one meaningful step today and give it your full attention.',
       });
     } catch (err) {
       console.error('[Gemini daily-briefing error]', err);
       res.json({
-        motivation: 'Consistency is the only variable within your direct control. Focus on the execution, not the outcome.',
-        focus: 'Operational Efficiency',
-        tip: 'Reduce friction in your environment to make your desired habits the default choice.',
-        journalPrompt: 'What was the most effective choice you made today?',
-        priorityTask: 'Audit your current workload and identify one high-leverage task to focus on.',
+        motivation: 'Small, consistent actions each day quietly add up to meaningful change.',
+        focus: 'Daily Balance',
+        tip: 'Make your next habit easy to start—even just two minutes builds momentum.',
+        journalPrompt: "What is one moment from today you'd like to remember?",
+        priorityTask: 'Choose one meaningful step today and give it your full attention.',
       });
     }
   });
@@ -254,6 +252,50 @@ async function startServer() {
     } catch (e) {
       console.error('[Gemini translate error]', e);
       res.json({ title, content });
+    }
+  });
+
+  // Weekly Review Synthesis
+  app.post('/api/gemini/weekly-review', async (req: Request, res: Response) => {
+    const { name = 'Friend', habits = [], goals = [], recentJournal = [], weekStats = {}, lang = 'English' } = req.body;
+    const prompt = `${getLangInstr(lang)} You are a warm, calm, reflective mentor in Lumina.
+Provide a peaceful weekly reflection for ${name}.
+Context:
+- Habits: ${JSON.stringify((habits || []).map((h: any) => ({ title: h.title, streak: h.streak })))}
+- Recent journal entries & wins: ${JSON.stringify((recentJournal || []).slice(0, 5).map((j: any) => ({ title: j.title, content: j.content, mood: j.mood })))}
+- Active goals: ${JSON.stringify((goals || []).map((g: any) => ({ title: g.title, progress: g.progress })))}
+- Week stats: ${JSON.stringify(weekStats)}
+
+Respond in valid JSON with:
+{
+  "summary": "A peaceful 1-2 sentence reflection celebrating this past week's consistency and rhythm.",
+  "keyWin": "A brief recognition of a win or consistent effort observed this week.",
+  "suggestedAdjustment": "One gentle, realistic adjustment for next week (e.g. keeping evening routines simpler, protecting morning focus). Avoid harshness or excessive productivity buzzwords.",
+  "upcomingFocus": "A calm, one-sentence guiding intention for the upcoming week."
+}`;
+
+    try {
+      const ai = getGenAIClient();
+      const response = await generateWithRetry(ai, {
+        model: MODEL,
+        contents: prompt,
+        config: { responseMimeType: 'application/json', temperature: 0.7 },
+      });
+      const data = JSON.parse(cleanJsonResponse(response.text || '{}'));
+      res.json({
+        summary: data.summary || "You showed up with quiet consistency this week. Small actions laid the foundation for steady calm.",
+        keyWin: data.keyWin || "Staying committed to your daily routines.",
+        suggestedAdjustment: data.suggestedAdjustment || "Pick one habit to keep effortless, and protect 10 minutes of quiet each evening.",
+        upcomingFocus: data.upcomingFocus || "Continue building momentum with steady, unhurried steps."
+      });
+    } catch (e) {
+      console.error('[Gemini weekly-review error]', e);
+      res.json({
+        summary: "You showed up with quiet consistency this week. Small actions laid the foundation for steady calm.",
+        keyWin: "Staying committed to your daily routines.",
+        suggestedAdjustment: "Pick one habit to keep effortless, and protect 10 minutes of quiet each evening.",
+        upcomingFocus: "Continue building momentum with steady, unhurried steps."
+      });
     }
   });
 

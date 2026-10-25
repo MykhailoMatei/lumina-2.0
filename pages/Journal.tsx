@@ -6,7 +6,8 @@ import {
     Sun, Moon, Clock, Sunset, BookOpen, Zap, CloudRain,
     Circle, Wind, ChevronDown, ChevronUp, ArrowRight, ArrowLeft,
     Tag, Heart, Briefcase, Smile, Users, Palette, Check, HelpCircle,
-    CheckCircle2, Coffee, Trophy, FileText, Utensils, Flame
+    CheckCircle2, Coffee, Trophy, FileText, Utensils, Flame,
+    Folder, FolderPlus, FolderOpen, Plus
 } from 'lucide-react';
 import { generateEntryInsight } from '../services/geminiService';
 import { uploadImage } from '../services/storageService';
@@ -72,7 +73,7 @@ const ENTRY_STYLES = [
         label: 'Daily Log', 
         icon: FileText, 
         badge: 'Routine & meals',
-        defaultCategory: 'Daily Life',
+        defaultCategory: 'Daily',
         placeholder: 'What did you do today? What did you eat, work on, or experience?',
         template: '• What I did:\n• Meals & Snacks:\n• How the day felt:' 
     },
@@ -81,7 +82,7 @@ const ENTRY_STYLES = [
         label: 'Daily Win', 
         icon: Trophy, 
         badge: 'Small victory',
-        defaultCategory: 'Self-Improvement',
+        defaultCategory: 'Growth',
         placeholder: 'What went right today? What is one win or milestone you executed well?'
     },
     { 
@@ -89,7 +90,7 @@ const ENTRY_STYLES = [
         label: 'Moment', 
         icon: Coffee, 
         badge: 'Pleasant memory',
-        defaultCategory: 'Relationships',
+        defaultCategory: 'Daily',
         placeholder: 'A pleasant moment, coffee with a friend, delicious food, or something that made you smile.'
     },
     { 
@@ -97,21 +98,39 @@ const ENTRY_STYLES = [
         label: 'Thought', 
         icon: Sparkles, 
         badge: 'Idea & insight',
-        defaultCategory: 'Mindfulness',
+        defaultCategory: 'Growth',
         placeholder: 'What realization or interesting idea crossed your mind today?'
     }
 ];
 
-const JOURNAL_CATEGORIES = [
-    { id: 'Daily Life', label: 'Daily Life', icon: Coffee, desc: 'Everyday routines, meals, events & simple notes' },
-    { id: 'Self-Improvement', label: 'Self-Improvement', icon: Target, desc: 'Growth, habits & mental discipline' },
-    { id: 'Health', label: 'Health', icon: Heart, desc: 'Body, workouts, energy & nutrition' },
-    { id: 'Career', label: 'Career', icon: Briefcase, desc: 'Work, craft, projects & momentum' },
-    { id: 'Mindfulness', label: 'Mindfulness', icon: Smile, desc: 'Presence, gratitude & peace of mind' },
-    { id: 'Learning', label: 'Learning', icon: BookOpen, desc: 'Books, new skills & lessons learned' },
-    { id: 'Relationships', label: 'Relationships', icon: Users, desc: 'Friends, family, gatherings & connections' },
-    { id: 'Creativity', label: 'Creativity', icon: Palette, desc: 'Art, music, ideas & creative projects' },
+export const DEFAULT_CORE_FOLDERS = [
+    { id: 'Daily', label: 'Daily', desc: 'Everyday routines, meals, events & memories' },
+    { id: 'Growth', label: 'Growth', desc: 'Mindset, habits, lessons & milestones' },
+    { id: 'Wellness', label: 'Wellness', desc: 'Body, workouts, energy & calm' },
+    { id: 'Work', label: 'Work', desc: 'Career, projects, focus & craft' },
 ];
+
+export const normalizeCategory = (cat?: string): string => {
+    if (!cat) return 'Daily';
+    const c = cat.trim();
+    if (c === 'Daily' || c === 'Growth' || c === 'Wellness' || c === 'Work') return c;
+    if (c === 'Daily Life') return 'Daily';
+    if (c === 'Self-Improvement' || c === 'Learning' || c === 'Creativity') return 'Growth';
+    if (c === 'Health' || c === 'Mindfulness') return 'Wellness';
+    if (c === 'Career') return 'Work';
+    if (c === 'Relationships') return 'Daily';
+    return c;
+};
+
+const CUSTOM_FOLDERS_STORAGE_KEY = 'lumina_journal_custom_folders';
+const getStoredCustomFolders = (): string[] => {
+    try {
+        const raw = localStorage.getItem(CUSTOM_FOLDERS_STORAGE_KEY);
+        return raw ? JSON.parse(raw) : [];
+    } catch {
+        return [];
+    }
+};
 
 const QUICK_TAG_ANCHORS = [
     'Delicious Meal 🍝',
@@ -128,7 +147,7 @@ export const Journal: React.FC = () => {
     const { 
         journalEntries, addJournalEntry, updateJournalEntry, deleteJournalEntry, goals, habits, user,
         themeClasses, language, dailyBriefing, preselectedGoalId, setPreselectedGoalId, circadian,
-        triggerNotification
+        triggerNotification, securitySettings
     } = useApp();
     
     // Editor Wizard State
@@ -141,25 +160,76 @@ export const Journal: React.FC = () => {
     const [title, setTitle] = useState('');
     const [content, setContent] = useState('');
     const [mood, setMood] = useState<'Great' | 'Good' | 'Neutral' | 'Bad' | 'Awful'>('Good');
-    const [category, setCategory] = useState<string>('Daily Life');
+    const [category, setCategory] = useState<string>('Daily');
     const [linkedGoalId, setLinkedGoalId] = useState<string>('');
     const [linkedHabitId, setLinkedHabitId] = useState<string>('');
     const [attachedImage, setAttachedImage] = useState<string | null>(null);
     const [showCategoryTooltip, setShowCategoryTooltip] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     
+    // Custom Folders State
+    const [customFolders, setCustomFolders] = useState<string[]>(getStoredCustomFolders);
+    const [showNewFolderModal, setShowNewFolderModal] = useState(false);
+    const [newFolderName, setNewFolderName] = useState('');
+    const [showInlineFolderInput, setShowInlineFolderInput] = useState(false);
+
     // Feed UI State
     const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('All');
     const [search, setSearch] = useState('');
     const [expandedEntryIds, setExpandedEntryIds] = useState<Record<string, boolean>>({});
+    const [quickNoteText, setQuickNoteText] = useState('');
     
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleCreateCustomFolder = (name: string) => {
+        const trimmed = name.trim();
+        if (!trimmed) return;
+        if (DEFAULT_CORE_FOLDERS.some(f => f.id.toLowerCase() === trimmed.toLowerCase())) {
+            setCategory(trimmed);
+            setSelectedCategoryFilter(trimmed);
+            return;
+        }
+        if (!customFolders.some(f => f.toLowerCase() === trimmed.toLowerCase())) {
+            const updated = [...customFolders, trimmed];
+            setCustomFolders(updated);
+            try {
+                localStorage.setItem(CUSTOM_FOLDERS_STORAGE_KEY, JSON.stringify(updated));
+            } catch {}
+        }
+        setCategory(trimmed);
+        setSelectedCategoryFilter(trimmed);
+        setNewFolderName('');
+        setShowNewFolderModal(false);
+        setShowInlineFolderInput(false);
+    };
+
+    const handleDeleteCustomFolder = (name: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        const updated = customFolders.filter(f => f !== name);
+        setCustomFolders(updated);
+        try {
+            localStorage.setItem(CUSTOM_FOLDERS_STORAGE_KEY, JSON.stringify(updated));
+        } catch {}
+        if (selectedCategoryFilter === name) {
+            setSelectedCategoryFilter('All');
+        }
+        if (category === name) {
+            setCategory('Daily');
+        }
+    };
+
+    const allFolders = useMemo(() => {
+        return [
+            ...DEFAULT_CORE_FOLDERS.map(f => ({ id: f.id, label: f.label, icon: Folder, isCustom: false })),
+            ...customFolders.map(name => ({ id: name, label: name, icon: Folder, isCustom: true }))
+        ];
+    }, [customFolders]);
 
     useEffect(() => {
         if (preselectedGoalId) {
             setLinkedGoalId(preselectedGoalId);
             setPreselectedGoalId(null);
-            setCategory('Self-Improvement');
+            setCategory('Growth');
             setEntryStyle('win');
             setWizardStep(1);
             setShowEditor(true);
@@ -184,24 +254,24 @@ export const Journal: React.FC = () => {
         });
     }, [journalEntries]);
 
-    // Category counts for filter tabs
-    const categoryCounts = useMemo(() => {
+    // Folder counts for filter tabs
+    const folderCounts = useMemo(() => {
         const counts: Record<string, number> = { All: journalEntries.length };
-        JOURNAL_CATEGORIES.forEach(c => {
-            counts[c.id] = journalEntries.filter(e => (e.category || 'Daily Life') === c.id).length;
+        allFolders.forEach(f => {
+            counts[f.id] = journalEntries.filter(e => normalizeCategory(e.category) === f.id).length;
         });
         return counts;
-    }, [journalEntries]);
+    }, [journalEntries, allFolders]);
 
-    // Filtered by category and search
+    // Filtered by category/folder and search
     const filteredEntries = useMemo(() => {
         return sortedEntries.filter(entry => {
-            const entryCat = entry.category || 'Daily Life';
+            const entryCat = normalizeCategory(entry.category);
             const matchesCategory = selectedCategoryFilter === 'All' || entryCat === selectedCategoryFilter;
             const matchesSearch = !search.trim() || 
                 (entry.title && entry.title.toLowerCase().includes(search.toLowerCase())) ||
                 entry.content.toLowerCase().includes(search.toLowerCase()) ||
-                (entry.category && entry.category.toLowerCase().includes(search.toLowerCase()));
+                entryCat.toLowerCase().includes(search.toLowerCase());
             return matchesCategory && matchesSearch;
         });
     }, [sortedEntries, selectedCategoryFilter, search]);
@@ -233,7 +303,7 @@ export const Journal: React.FC = () => {
         setTitle(entry.title || '');
         setContent(entry.content);
         setMood(entry.mood);
-        setCategory(entry.category || 'Daily Life');
+        setCategory(normalizeCategory(entry.category));
         setLinkedGoalId(entry.linkedGoalId || '');
         setLinkedHabitId(entry.linkedHabitId || '');
         setAttachedImage(entry.imageData || null);
@@ -245,7 +315,7 @@ export const Journal: React.FC = () => {
         setTitle('');
         setContent('');
         setMood('Good');
-        setCategory('Daily Life');
+        setCategory('Daily');
         setEntryStyle('log');
         setLinkedGoalId('');
         setLinkedHabitId('');
@@ -253,6 +323,7 @@ export const Journal: React.FC = () => {
         setEditingEntryId(null);
         setWizardStep(1);
         setShowCategoryTooltip(false);
+        setShowInlineFolderInput(false);
         setShowEditor(false);
     };
 
@@ -323,14 +394,17 @@ export const Journal: React.FC = () => {
                 const linkedGoal = goals.find(g => g.id === goalId);
                 const linkedHabit = habits.find(h => h.id === habitId);
                 
-                const insight = await generateEntryInsight(
-                    rawContent, 
-                    selectedMood, 
-                    linkedGoal?.title || null, 
-                    linkedHabit?.title || null,
-                    currentAttachedImage, 
-                    language
-                );
+                let insight: string | null = null;
+                if (!securitySettings?.aiDisabled) {
+                    insight = await generateEntryInsight(
+                        rawContent, 
+                        selectedMood, 
+                        linkedGoal?.title || null, 
+                        linkedHabit?.title || null,
+                        currentAttachedImage, 
+                        language
+                    );
+                }
 
                 if (insight || (finalImageUrl && finalImageUrl !== currentAttachedImage)) {
                     updateJournalEntry(targetId, {
@@ -341,6 +415,41 @@ export const Journal: React.FC = () => {
             } catch (err) {
                 console.warn('Background insight generation error:', err);
             }
+        })();
+    };
+
+    const handleQuickJournalSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        const raw = quickNoteText.trim();
+        if (!raw) return;
+
+        const targetId = Date.now().toString();
+        const generatedTitle = raw.split('\n')[0].slice(0, 48) || 'Daily Note';
+        const targetFolder = selectedCategoryFilter === 'All' ? 'Daily' : selectedCategoryFilter;
+
+        addJournalEntry({
+            id: targetId,
+            date: new Date().toISOString(),
+            title: generatedTitle,
+            category: targetFolder,
+            content: raw,
+            mood: 'Good',
+            activities: [],
+            prompt: dailyBriefing?.journalPrompt || "What's on your mind?"
+        });
+
+        triggerNotification('Saved ✨', `"${generatedTitle}" logged to timeline.`, 'achievement');
+        setQuickNoteText('');
+
+        (async () => {
+            try {
+                if (!securitySettings?.aiDisabled) {
+                    const insight = await generateEntryInsight(raw, 'Good', null, null, null, language);
+                    if (insight) {
+                        updateJournalEntry(targetId, { aiInsight: insight });
+                    }
+                }
+            } catch {}
         })();
     };
 
@@ -391,40 +500,78 @@ export const Journal: React.FC = () => {
                 </div>
             </div>
 
-            {/* CATEGORY FILTER PILL BAR */}
+            {/* MINIMALIST FOLDER ORGANIZER BAR */}
             <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 px-1">
+                {/* All Notes Box */}
                 <button
+                    type="button"
                     onClick={() => setSelectedCategoryFilter('All')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all border ${
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${
                         selectedCategoryFilter === 'All'
-                            ? `${themeClasses.primary} text-white border-transparent shadow-sm`
-                            : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:text-slate-700'
+                            ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-slate-900 dark:border-white shadow-sm'
+                            : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
                     }`}
                 >
-                    <Sparkles size={11} />
-                    <span>All</span>
-                    <span className="text-[10px] opacity-70">({categoryCounts.All || 0})</span>
+                    <FolderOpen size={13} className={selectedCategoryFilter === 'All' ? 'text-indigo-400 dark:text-indigo-600' : 'text-slate-400'} />
+                    <span>All Notes</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold ${
+                        selectedCategoryFilter === 'All' 
+                            ? 'bg-white/20 text-white dark:bg-slate-900/15 dark:text-slate-900' 
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                    }`}>
+                        {folderCounts.All || 0}
+                    </span>
                 </button>
-                {JOURNAL_CATEGORIES.map(cat => {
-                    const CatIcon = cat.icon;
-                    const isActive = selectedCategoryFilter === cat.id;
-                    const count = categoryCounts[cat.id] || 0;
+
+                {/* 4 Core + Custom Folder Boxes */}
+                {allFolders.map(folder => {
+                    const isActive = selectedCategoryFilter === folder.id;
+                    const count = folderCounts[folder.id] || 0;
                     return (
-                        <button
-                            key={cat.id}
-                            onClick={() => setSelectedCategoryFilter(cat.id)}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all border ${
-                                isActive
-                                    ? `${themeClasses.primary} text-white border-transparent shadow-sm`
-                                    : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:text-slate-700'
-                            }`}
-                        >
-                            <CatIcon size={11} />
-                            <span>{cat.label}</span>
-                            <span className="text-[10px] opacity-70">({count})</span>
-                        </button>
+                        <div key={folder.id} className="relative group shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => setSelectedCategoryFilter(folder.id)}
+                                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${
+                                    isActive
+                                        ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-slate-900 dark:border-white shadow-sm'
+                                        : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                                }`}
+                            >
+                                <Folder size={13} className={isActive ? 'text-indigo-400 dark:text-indigo-600' : 'text-slate-400'} />
+                                <span>{folder.label}</span>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold ${
+                                    isActive 
+                                        ? 'bg-white/20 text-white dark:bg-slate-900/15 dark:text-slate-900' 
+                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                                }`}>
+                                    {count}
+                                </span>
+                                {folder.isCustom && (
+                                    <span
+                                        role="button"
+                                        onClick={(e) => handleDeleteCustomFolder(folder.id, e)}
+                                        className="ml-0.5 text-slate-400 hover:text-rose-500 p-0.5 rounded transition-colors"
+                                        title="Delete custom folder"
+                                    >
+                                        <X size={11} />
+                                    </span>
+                                )}
+                            </button>
+                        </div>
                     );
                 })}
+
+                {/* + New Folder Box Button */}
+                <button
+                    type="button"
+                    onClick={() => setShowNewFolderModal(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap border border-dashed border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50/30 dark:hover:bg-indigo-950/20 transition-all shrink-0"
+                    title="Create custom folder"
+                >
+                    <FolderPlus size={13} />
+                    <span>+ Folder</span>
+                </button>
             </div>
 
             {/* SEARCH BAR (WHEN ENTRIES EXIST) */}
@@ -444,6 +591,35 @@ export const Journal: React.FC = () => {
                     )}
                 </div>
             )}
+
+            {/* QUICK LOG INPUT (1-TAP ZERO FRICTION) */}
+            <form onSubmit={handleQuickJournalSubmit} className="flex items-center gap-2 px-1">
+                <div className="relative flex-1">
+                    <input 
+                        type="text"
+                        value={quickNoteText}
+                        onChange={e => setQuickNoteText(e.target.value)}
+                        placeholder={`+ Quick note in ${selectedCategoryFilter === 'All' ? 'Daily' : selectedCategoryFilter} (e.g. Pasta for dinner, great workout)...`}
+                        className="w-full h-10 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2 text-xs font-normal text-slate-800 dark:text-white placeholder:text-slate-400 outline-none focus:border-indigo-500 shadow-sm transition-colors"
+                    />
+                    {quickNoteText && (
+                        <button 
+                            type="button" 
+                            onClick={() => setQuickNoteText('')} 
+                            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        >
+                            <X size={12} />
+                        </button>
+                    )}
+                </div>
+                <button 
+                    type="submit" 
+                    disabled={!quickNoteText.trim()}
+                    className={`h-10 px-4 rounded-xl text-white text-xs font-semibold uppercase tracking-wider bg-gradient-to-br ${themeClasses.gradient} disabled:opacity-40 transition-all shrink-0 active:scale-95 shadow-sm flex items-center justify-center`}
+                >
+                    Log
+                </button>
+            </form>
 
             {/* FEED: COMPACT CARDS (LATEST FIRST) */}
             <div className="space-y-2.5 min-h-[35vh] flex flex-col px-1">
@@ -483,8 +659,7 @@ export const Journal: React.FC = () => {
                         const entryDate = entry.date ? new Date(entry.date) : new Date();
                         const formattedDate = entryDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
                         const entryTitle = entry.title || (entry.content.split('\n')[0].slice(0, 48) || 'Daily Note');
-                        const catMeta = JOURNAL_CATEGORIES.find(c => c.id === entry.category) || JOURNAL_CATEGORIES[0];
-                        const CatIcon = catMeta.icon;
+                        const entryFolder = normalizeCategory(entry.category);
 
                         return (
                             <div 
@@ -507,11 +682,11 @@ export const Journal: React.FC = () => {
                                                 </span>
                                             </div>
 
-                                            {/* Category Badge */}
-                                            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700/60">
-                                                <CatIcon size={10} className="text-slate-400" />
-                                                <span className="text-[10px] font-medium tracking-wide">
-                                                    {entry.category || 'Daily Life'}
+                                            {/* Minimalist Folder Box */}
+                                            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-100/90 dark:bg-slate-800/90 text-slate-600 dark:text-slate-300 border border-slate-200/90 dark:border-slate-700/60">
+                                                <Folder size={10} className="text-slate-400" />
+                                                <span className="text-[10px] font-semibold tracking-wide">
+                                                    {entryFolder}
                                                 </span>
                                             </div>
 
@@ -824,65 +999,84 @@ export const Journal: React.FC = () => {
                                 </div>
                             )}
 
-                            {/* STEP 2: LIFE DOMAIN / CATEGORY */}
+                            {/* STEP 2: MINIMALIST FOLDER SELECTION */}
                             {wizardStep === 2 && (
                                 <div className="space-y-4 animate-in fade-in slide-in-from-right-2 duration-200">
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block">
-                                                Which life category?
+                                                Select Folder
                                             </label>
                                             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                                Pick "Daily Life" for general logs, or a specific domain.
+                                                Choose which folder this note belongs to.
                                             </p>
                                         </div>
                                         <button 
                                             type="button" 
-                                            onClick={() => setShowCategoryTooltip(!showCategoryTooltip)}
-                                            className="p-1.5 text-slate-400 hover:text-slate-600 transition-colors"
+                                            onClick={() => setShowInlineFolderInput(!showInlineFolderInput)}
+                                            className="flex items-center gap-1 text-xs font-semibold text-indigo-500 hover:text-indigo-600 transition-colors"
                                         >
-                                            <HelpCircle size={15} />
+                                            <FolderPlus size={13} />
+                                            <span>+ New Folder</span>
                                         </button>
                                     </div>
 
-                                    {showCategoryTooltip && (
-                                        <div className="bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50 p-3 rounded-2xl text-xs text-indigo-900 dark:text-indigo-200 animate-in fade-in leading-relaxed">
-                                            💡 <b>Organized Timeline:</b> Tagging entries lets you easily filter your memories later (e.g. review all delicious meals or career breakthroughs) and provides signal to your Growth Audit.
+                                    {/* Inline Custom Folder Input */}
+                                    {showInlineFolderInput && (
+                                        <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center gap-2 animate-in fade-in">
+                                            <Folder size={14} className="text-indigo-500 shrink-0" />
+                                            <input
+                                                type="text"
+                                                autoFocus
+                                                value={newFolderName}
+                                                onChange={(e) => setNewFolderName(e.target.value)}
+                                                placeholder="Folder name (e.g. Travel, Books, Ideas)"
+                                                className="flex-1 bg-transparent text-xs text-slate-800 dark:text-white outline-none font-medium placeholder:text-slate-400"
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        handleCreateCustomFolder(newFolderName);
+                                                    }
+                                                }}
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => handleCreateCustomFolder(newFolderName)}
+                                                disabled={!newFolderName.trim()}
+                                                className="px-3 py-1 bg-indigo-600 text-white rounded-lg text-xs font-semibold disabled:opacity-40"
+                                            >
+                                                Add
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowInlineFolderInput(false)}
+                                                className="text-slate-400 hover:text-slate-600 p-1"
+                                            >
+                                                <X size={13} />
+                                            </button>
                                         </div>
                                     )}
 
-                                    {/* Category Grid */}
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                        {JOURNAL_CATEGORIES.map(cat => {
-                                            const CatIcon = cat.icon;
-                                            const isSelected = category === cat.id;
+                                    {/* Minimalist Folder Boxes Grid */}
+                                    <div className="grid grid-cols-2 gap-2.5">
+                                        {allFolders.map(f => {
+                                            const isSelected = normalizeCategory(category) === f.id;
                                             return (
                                                 <button
-                                                    key={cat.id}
+                                                    key={f.id}
                                                     type="button"
-                                                    onClick={() => setCategory(cat.id)}
-                                                    className={`p-3 rounded-2xl border text-left flex items-start gap-2.5 transition-all ${
+                                                    onClick={() => setCategory(f.id)}
+                                                    className={`p-3 rounded-2xl border text-left flex items-center justify-between transition-all ${
                                                         isSelected
-                                                            ? `${themeClasses.secondary} ${themeClasses.border} shadow-sm ring-1 ring-inset ring-current`
-                                                            : 'bg-white dark:bg-slate-800/60 border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700'
+                                                            ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-slate-900 dark:border-white shadow-md'
+                                                            : 'bg-white dark:bg-slate-800/60 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 text-slate-700 dark:text-slate-200'
                                                     }`}
                                                 >
-                                                    <div className={`p-2 rounded-xl shrink-0 ${
-                                                        isSelected ? `${themeClasses.primary} text-white shadow-sm` : 'bg-slate-100 dark:bg-slate-700/60 text-slate-500'
-                                                    }`}>
-                                                        <CatIcon size={15} />
+                                                    <div className="flex items-center gap-2.5 min-w-0">
+                                                        <Folder size={15} className={isSelected ? 'text-indigo-400 dark:text-indigo-600' : 'text-slate-400'} />
+                                                        <span className="text-xs font-semibold truncate">{f.label}</span>
                                                     </div>
-                                                    <div className="min-w-0 flex-1">
-                                                        <div className="flex items-center justify-between">
-                                                            <h4 className={`text-xs font-bold leading-tight ${isSelected ? themeClasses.text : 'text-slate-700 dark:text-slate-200'}`}>
-                                                                {cat.label}
-                                                            </h4>
-                                                            {isSelected && <Check size={12} className={themeClasses.text} />}
-                                                        </div>
-                                                        <p className="text-[10px] text-slate-400 mt-0.5 leading-snug line-clamp-1">
-                                                            {cat.desc}
-                                                        </p>
-                                                    </div>
+                                                    {isSelected && <Check size={13} className={isSelected ? 'text-white dark:text-slate-900' : ''} />}
                                                 </button>
                                             );
                                         })}
@@ -1058,8 +1252,9 @@ export const Journal: React.FC = () => {
                                                 <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-indigo-50 dark:bg-indigo-900/30 text-indigo-500">
                                                     {mood}
                                                 </span>
-                                                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
-                                                    {category}
+                                                <span className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-200/80 dark:bg-slate-700/80 text-slate-700 dark:text-slate-300 border border-slate-300/50 dark:border-slate-600">
+                                                    <Folder size={10} className="text-slate-400" />
+                                                    <span>{normalizeCategory(category)}</span>
                                                 </span>
                                                 <span className="text-[11px] text-slate-400">Just now</span>
                                             </div>
@@ -1120,6 +1315,67 @@ export const Journal: React.FC = () => {
                                     <span>{editingEntryId ? 'Update Entry' : 'Save to Timeline'}</span>
                                 </button>
                             )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* CREATE CUSTOM FOLDER MODAL */}
+            {showNewFolderModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="absolute inset-0 bg-slate-950/50 backdrop-blur-sm" onClick={() => setShowNewFolderModal(false)} />
+                    <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-5 shadow-2xl relative border border-slate-100 dark:border-slate-800 space-y-4 animate-in zoom-in-95">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                                    <FolderPlus size={16} />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-bold text-slate-800 dark:text-white">New Folder</h3>
+                                    <p className="text-[11px] text-slate-400">Add a personal journal folder</p>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => setShowNewFolderModal(false)}
+                                className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 flex items-center justify-center"
+                            >
+                                <X size={14} />
+                            </button>
+                        </div>
+
+                        <div>
+                            <input
+                                type="text"
+                                autoFocus
+                                value={newFolderName}
+                                onChange={e => setNewFolderName(e.target.value)}
+                                placeholder="Folder name (e.g. Travel, Books, Ideas)"
+                                className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 dark:text-white outline-none focus:border-indigo-500"
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        handleCreateCustomFolder(newFolderName);
+                                    }
+                                }}
+                            />
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                            <button
+                                type="button"
+                                onClick={() => setShowNewFolderModal(false)}
+                                className="px-3.5 py-2 text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleCreateCustomFolder(newFolderName)}
+                                disabled={!newFolderName.trim()}
+                                className={`px-4 py-2 rounded-xl text-white text-xs font-semibold uppercase tracking-wider bg-gradient-to-br ${themeClasses.gradient} disabled:opacity-40 shadow-sm`}
+                            >
+                                Create Folder
+                            </button>
                         </div>
                     </div>
                 </div>

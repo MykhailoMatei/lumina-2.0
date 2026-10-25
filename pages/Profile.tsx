@@ -5,7 +5,8 @@ import {
     User, Palette, Moon, Globe, Trash2, Shield, Settings, 
     Check, Lock, X, Move, ZoomIn, Camera,
     ShieldCheck, Loader2, Cloud, CloudOff, Link2, LogOut, ArrowRight,
-    RefreshCw, BellRing, Clock, Key, ShieldAlert, Smartphone, Zap, Info, Activity, Database, Sparkles
+    RefreshCw, BellRing, Clock, Key, ShieldAlert, Smartphone, Zap, Info, Activity, Database, Sparkles,
+    Download, FileText
 } from 'lucide-react';
 import { uploadImage } from '../services/storageService';
 import { AuthModal } from '../components/AuthModal';
@@ -19,7 +20,8 @@ export const Profile: React.FC = () => {
         name, avatar, theme, themeColor, language, themeClasses, 
         securitySettings, syncStatus, user, notificationSettings,
         updateUserPreferences, deleteAccount, t, setPinCode, 
-        syncWithCloud, signOut, triggerNotification, dashboardLayout
+        syncWithCloud, signOut, triggerNotification, dashboardLayout,
+        exportData, exportJournalMarkdown
     } = useApp();
 
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -99,12 +101,12 @@ export const Profile: React.FC = () => {
                 await new Promise(resolve => setTimeout(resolve, 2000));
                 const active = await checkSwStatus();
                 if (active) {
-                    triggerNotification("System Online", "Lumina background core is now synchronized.", "achievement");
+                    triggerNotification("Notifications Ready", "Background service is active.", "achievement");
                 } else {
-                    triggerNotification("Waiting for Browser", "System registered. Please close and reopen the app to finalize.", "reminder");
+                    triggerNotification("Almost Ready", "Please refresh the app once to finalize notifications.", "reminder");
                 }
             } catch (e) {
-                triggerNotification("System Blocked", "Please check your browser privacy settings.", "reminder");
+                triggerNotification("Notice", "Please check your browser notification permissions.", "reminder");
             }
         }
         setIsRetryingSw(false);
@@ -132,12 +134,12 @@ export const Profile: React.FC = () => {
 
         if (currentlyEnabled) {
             updateUserPreferences({ notificationSettings: { ...notificationSettings, enabled: false } });
-            triggerNotification("Alerts Paused", "Lumina will stay quiet for now.", "reminder");
+            triggerNotification("Reminders Paused", "Daily habit notifications are turned off.", "reminder");
             return;
         }
 
         if (!user) {
-            triggerNotification("Identity Required", "Connect your account below to enable push notifications.", "reminder");
+            triggerNotification("Account Required", "Sign in below to enable notifications.", "reminder");
             setShowAuth(true);
             return;
         }
@@ -148,7 +150,7 @@ export const Profile: React.FC = () => {
              // One last attempt to wait for it
              const registrations = await navigator.serviceWorker.getRegistrations();
              if (registrations.length === 0) {
-                triggerNotification("System Cold-Start", "Background system is initializing. Tap 'Initialize Core' in diagnostics if this persists.", "reminder");
+                triggerNotification("Service Starting", "Service worker initializing. Tap 'Start Service' in system status if needed.", "reminder");
                 return;
              }
         }
@@ -158,15 +160,15 @@ export const Profile: React.FC = () => {
         if (permissionState === 'unsupported') {
             const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
             if (isIOS && !isStandalone) {
-                triggerNotification("iOS Requirement", "On iPhone, you must 'Add to Home Screen' via the share menu for notifications.", "reminder");
+                triggerNotification("iOS Notice", "On iPhone, tap Share then 'Add to Home Screen' to enable notifications.", "reminder");
             } else {
-                triggerNotification("API Unsupported", "Your browser does not support the Push API.", "reminder");
+                triggerNotification("Unsupported", "Your browser does not support the Push API.", "reminder");
             }
             return;
         }
 
         if (permissionState === 'denied') {
-            triggerNotification("Access Blocked", "Please reset site permissions in browser settings.", "reminder");
+            triggerNotification("Permission Denied", "Please enable notifications in your browser settings.", "reminder");
             return;
         }
 
@@ -174,10 +176,10 @@ export const Profile: React.FC = () => {
             const sub = await subscribeToPush(user.id);
             if (sub) {
                 updateUserPreferences({ notificationSettings: { ...notificationSettings, enabled: true } });
-                triggerNotification("Lumina Linked", "Signal active! 🚀", "achievement");
-                await sendSystemNotification("Secure Link Active", { body: "You are now receiving growth nudges." });
+                triggerNotification("Reminders Active ✨", "You'll receive reminders for your daily habits.", "achievement");
+                await sendSystemNotification("Reminders Active", { body: "You will now receive scheduled reminders for your habits." });
             } else {
-                triggerNotification("Network Error", "Could not establish push link. Check your connection.", "reminder");
+                triggerNotification("Connection Error", "Could not establish push link. Check your internet connection.", "reminder");
             }
         }
     };
@@ -194,8 +196,8 @@ export const Profile: React.FC = () => {
             return;
         }
 
-        await sendSystemNotification("Local Signal Test", {
-            body: "Ping received! Your device is responding to Lumina.",
+        await sendSystemNotification("Test Reminder", {
+            body: "Notifications are working properly on this device.",
             tag: 'test-push'
         });
 
@@ -322,25 +324,25 @@ export const Profile: React.FC = () => {
             {showDiagnostics && (
                 <div className="bg-slate-900 text-emerald-400 p-6 rounded-[2rem] font-mono text-[10px] space-y-2 animate-in slide-in-from-top-4">
                     <div className="flex justify-between border-b border-white/10 pb-1 mb-2">
-                        <span className="font-bold text-white uppercase">Identity Diagnostics</span>
+                        <span className="font-bold text-white uppercase">System Status</span>
                         <X size={14} className="cursor-pointer" onClick={() => setShowDiagnostics(false)} />
                     </div>
-                    <div className="flex justify-between"><span>Environment:</span> <span className={isStandalone ? 'text-emerald-400' : 'text-rose-400'}>{isStandalone ? 'STANDALONE (PWA)' : 'BROWSER TAB'}</span></div>
+                    <div className="flex justify-between"><span>Environment:</span> <span className={isStandalone ? 'text-emerald-400' : 'text-slate-400'}>{isStandalone ? 'INSTALLED APP (PWA)' : 'BROWSER TAB'}</span></div>
                     <div className="flex justify-between items-center">
-                        <span>Background Core:</span> 
+                        <span>Background Service:</span> 
                         <div className="flex items-center gap-2">
-                            <span className={swActive ? 'text-emerald-400' : 'text-rose-400'}>{swActive ? 'ACTIVE' : 'INACTIVE'}</span>
+                            <span className={swActive ? 'text-emerald-400' : 'text-amber-400'}>{swActive ? 'ACTIVE' : 'INACTIVE'}</span>
                             <button onClick={handleRetrySignal} disabled={isRetryingSw} className="px-2 py-0.5 bg-white/10 rounded-md text-white hover:bg-white/20 disabled:opacity-50 text-[10px] font-semibold uppercase">
-                                {isRetryingSw ? 'WAITING...' : 'INITIALIZE CORE'}
+                                {isRetryingSw ? 'STARTING...' : 'START SERVICE'}
                             </button>
                         </div>
                     </div>
-                    <div className="flex justify-between"><span>Signal Permission:</span> <span className={Notification.permission === 'granted' ? 'text-emerald-400' : 'text-rose-400'}>{Notification.permission.toUpperCase()}</span></div>
-                    <div className="flex justify-between"><span>Growth Vault:</span> <span className={user ? 'text-emerald-400' : 'text-rose-400'}>{user ? 'CLAIMED' : 'LOCAL ONLY'}</span></div>
+                    <div className="flex justify-between"><span>Notifications:</span> <span className={Notification.permission === 'granted' ? 'text-emerald-400' : 'text-amber-400'}>{Notification.permission.toUpperCase()}</span></div>
+                    <div className="flex justify-between"><span>Cloud Sync:</span> <span className={user ? 'text-emerald-400' : 'text-slate-400'}>{user ? 'CONNECTED' : 'LOCAL ONLY'}</span></div>
                     <div className="mt-4 p-3 bg-white/5 rounded-xl text-white/60 leading-relaxed italic">
                         {isStandalone 
-                            ? "✓ PWA Core active. If status is Inactive, tap 'Initialize Core' to force-start background signal." 
-                            : "⚠ Application is running in browser mode. Background signal is limited."}
+                            ? "✓ Service worker active. If notifications are inactive, tap 'Start Service'." 
+                            : "ℹ Running in browser tab. Add to Home Screen for background notifications."}
                     </div>
                 </div>
             )}
@@ -403,18 +405,18 @@ export const Profile: React.FC = () => {
                 </div>
             </div>
 
-            {/* MOBILE SYNC & PUSH */}
+            {/* NOTIFICATIONS & SYNC */}
             <div className="bg-slate-50/50 dark:bg-slate-800/20 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 space-y-5">
                 <div className="flex items-center gap-2">
                     <div className={themeClasses?.text || 'text-indigo-600'}><Smartphone size={14} className="shrink-0" /></div>
-                    <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider leading-none">System Sync</h2>
+                    <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider leading-none">Sync & Notifications</h2>
                 </div>
 
                 <div className="space-y-3.5">
                     {renderToggle(
                         !!notificationSettings?.enabled, 
                         handleEnableNotifications, 
-                        "Growth Nudges", 
+                        "Daily Reminders", 
                         <BellRing size={16} />, 
                         getNotificationStatus()
                     )}
@@ -422,10 +424,10 @@ export const Profile: React.FC = () => {
                     <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3.5 shadow-sm">
                         <div className="flex justify-between items-center">
                             <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2">
-                                <Zap size={14} className="text-amber-500" /> Link Integrity
+                                <Zap size={14} className="text-amber-500" /> Push Connection
                             </span>
                             <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-md ${notificationSettings?.enabled ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
-                                {notificationSettings?.enabled ? 'Online' : 'Offline'}
+                                {notificationSettings?.enabled ? 'Active' : 'Off'}
                             </span>
                         </div>
                         <button 
@@ -434,7 +436,7 @@ export const Profile: React.FC = () => {
                             className={`w-full py-3 rounded-xl font-semibold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-sm ${notificationSettings?.enabled ? `${themeClasses?.primary || 'bg-indigo-600'} text-white active:scale-95` : 'bg-slate-100 dark:bg-slate-800 text-slate-400 opacity-50 cursor-not-allowed'}`}
                         >
                             {isTestingPush ? <Loader2 size={14} className="animate-spin" /> : <Smartphone size={14} />}
-                            {isTestingPush ? 'Testing Signal...' : 'Send Test Nudge'}
+                            {isTestingPush ? 'Sending Test...' : 'Send Test Reminder'}
                         </button>
                     </div>
 
@@ -442,18 +444,18 @@ export const Profile: React.FC = () => {
                          <div className="bg-amber-50/60 dark:bg-amber-950/20 p-4 rounded-2xl border border-amber-100 dark:border-amber-900/30 flex gap-3">
                             <ShieldAlert size={16} className="text-amber-500 shrink-0 mt-0.5" />
                             <div className="text-xs font-normal text-amber-800 dark:text-amber-300 leading-relaxed italic">
-                                <strong>PWA Reminder:</strong> To enable background growth nudges, tap your browser menu and select <strong>"Add to Home Screen"</strong>.
+                                <strong>Home Screen Tip:</strong> For reliable reminders even when the app is closed, tap Share and select <strong>"Add to Home Screen"</strong>.
                             </div>
                          </div>
                     )}
                 </div>
             </div>
 
-            {/* ROUTINE TIMELINE CARD */}
+            {/* ROUTINE SCHEDULE CARD */}
             <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 space-y-5">
                 <div className="flex items-center gap-2">
                     <div className={themeClasses?.text || 'text-indigo-600'}><Clock size={14} className="shrink-0" /></div>
-                    <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider leading-none">Routine Timeline</h2>
+                    <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider leading-none">Daily Schedule</h2>
                 </div>
 
                 <div className="grid grid-cols-1 gap-2.5">
@@ -461,7 +463,7 @@ export const Profile: React.FC = () => {
                         <div key={phase} className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-slate-800 transition-all">
                             <div className="flex items-center gap-3">
                                 <Clock size={15} className="text-slate-400" />
-                                <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">{phase} Window</span>
+                                <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">{phase}</span>
                             </div>
                             <input 
                                 type="time"
@@ -545,12 +547,33 @@ export const Profile: React.FC = () => {
                 </div>
             </div>
 
-            {/* SECURITY CARD */}
+            {/* SECURITY & PRIVACY CARD */}
             <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 space-y-5">
                 <div className="flex items-center gap-2">
                     <div className={themeClasses?.text || 'text-indigo-600'}><Shield size={14} className="shrink-0" /></div>
-                    <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider leading-none">Identity Guard</h2>
+                    <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider leading-none">Privacy & Security</h2>
                 </div>
+
+                {renderToggle(
+                    !securitySettings?.aiDisabled,
+                    () => {
+                        const currentDisabled = !!securitySettings?.aiDisabled;
+                        updateUserPreferences({
+                            securitySettings: {
+                                ...securitySettings,
+                                aiDisabled: !currentDisabled
+                            }
+                        });
+                        triggerNotification(
+                            currentDisabled ? "AI Enabled" : "AI Offline",
+                            currentDisabled ? "Lumina AI insights are active." : "Zero external transmission. Lumina is 100% offline.",
+                            "achievement"
+                        );
+                    },
+                    "AI Growth Insights",
+                    <Sparkles size={16} />,
+                    !securitySettings?.aiDisabled ? "Active (Google Gemini)" : "Disabled (Zero cloud transmission)"
+                )}
 
                 {renderToggle(
                     !!securitySettings?.pinCode,
@@ -558,17 +581,18 @@ export const Profile: React.FC = () => {
                         if (securitySettings?.pinCode) setPinCode(null);
                         else setSettingPin(true);
                     },
-                    "App Lock",
+                    "Device PIN Screen",
                     <Lock size={16} />,
-                    securitySettings?.pinCode ? 'Secured' : 'Open'
+                    securitySettings?.pinCode ? 'Enabled' : 'Disabled'
                 )}
 
                 {settingPin && (
                     <div className="space-y-3 animate-in slide-in-from-top-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 shadow-inner">
                         <div className="flex items-center justify-between">
-                            <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">Set 4-Digit Identity PIN</label>
+                            <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">Set 4-Digit Device PIN</label>
                             <button onClick={() => setSettingPin(false)} className="text-slate-400 hover:text-slate-600"><X size={16}/></button>
                         </div>
+                        <p className="text-[11px] text-slate-400">A local privacy shield that requires your PIN when opening Lumina.</p>
                         <div className="flex gap-2 sm:gap-3">
                             <input 
                                 type="text"
@@ -592,7 +616,37 @@ export const Profile: React.FC = () => {
                 )}
             </div>
 
-            {/* GROWTH VAULT CARD */}
+            {/* DATA PORTABILITY & EXPORT */}
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 space-y-4">
+                <div className="flex items-center gap-2">
+                    <div className={themeClasses?.text || 'text-indigo-600'}><Database size={14} className="shrink-0" /></div>
+                    <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider leading-none">Data Portability & Backup</h2>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    You have complete ownership of your data. Export your journal to human-readable Markdown for Obsidian/Notion, or download a full JSON backup.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                    <button
+                        type="button"
+                        onClick={exportJournalMarkdown}
+                        className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:border-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all shadow-sm active:scale-95"
+                    >
+                        <FileText size={14} />
+                        <span>Export Journal (.md)</span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={exportData}
+                        className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:border-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all shadow-sm active:scale-95"
+                    >
+                        <Download size={14} />
+                        <span>Full Backup (.json)</span>
+                    </button>
+                </div>
+            </div>
+
+            {/* ACCOUNT & CLOUD SYNC CARD */}
             <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 relative overflow-hidden group">
                 <div className={`absolute top-0 right-0 w-48 h-48 ${themeClasses?.primary || 'bg-indigo-600'} opacity-5 rounded-full blur-[80px] -mr-24 -mt-24 transition-transform duration-1000 group-hover:scale-110`} />
                 
@@ -603,8 +657,8 @@ export const Profile: React.FC = () => {
                                 {user ? <Cloud size={22} className="text-emerald-500" /> : <CloudOff size={22} className="text-slate-400" />}
                             </div>
                             <div className="min-w-0">
-                                <h2 className="text-sm font-semibold uppercase text-slate-800 dark:text-white tracking-wider truncate">Growth Vault</h2>
-                                <p className="text-xs font-normal text-slate-400 truncate">{user ? 'Secured & Synchronized' : 'Offline Persistence Only'}</p>
+                                <h2 className="text-sm font-semibold uppercase text-slate-800 dark:text-white tracking-wider truncate">Account & Sync</h2>
+                                <p className="text-xs font-normal text-slate-400 truncate">{user ? 'Connected & Synchronized' : 'Saved Locally on this Device'}</p>
                             </div>
                         </div>
                         {user && (
@@ -617,10 +671,10 @@ export const Profile: React.FC = () => {
                     {!user ? (
                         <div className="space-y-4">
                             <div className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-4 border border-slate-100 dark:border-slate-800">
-                                <p className="text-xs font-normal text-slate-600 dark:text-slate-300 leading-relaxed">Your evolution is currently <span className="text-emerald-500 font-semibold">local-only</span>. Synchronize your journey across devices.</p>
+                                <p className="text-xs font-normal text-slate-600 dark:text-slate-300 leading-relaxed">Your journal and habits are saved <span className="text-emerald-500 font-semibold">locally on this device</span>. Sign in to sync across devices.</p>
                             </div>
                             <button onClick={() => setShowAuth(true)} className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 py-3.5 rounded-2xl text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm hover:scale-[1.01] transition-all">
-                                <Link2 size={14} /> Claim Your Identity <ArrowRight size={14} />
+                                <Link2 size={14} /> Sign In or Create Account <ArrowRight size={14} />
                             </button>
                         </div>
                     ) : (
@@ -629,7 +683,7 @@ export const Profile: React.FC = () => {
                                 <div className="flex items-center gap-3 overflow-hidden">
                                     <div className="w-9 h-9 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 shrink-0"><ShieldCheck size={18} /></div>
                                     <div className="flex flex-col min-w-0">
-                                        <span className="text-[10px] font-semibold uppercase text-slate-400 tracking-wider">Vault Owner</span>
+                                        <span className="text-[10px] font-semibold uppercase text-slate-400 tracking-wider">Account</span>
                                         <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 truncate">{user.email}</span>
                                     </div>
                                 </div>

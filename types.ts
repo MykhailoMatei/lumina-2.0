@@ -36,6 +36,15 @@ export interface Goal {
   lastUpdated?: number;
 }
 
+export interface HabitReward {
+  title: string;              // e.g. "Gaming", "Guilt-free Netflix", "Podcast walk"
+  amount: number;             // e.g. 30
+  unit: string;               // e.g. "min", "episodes", "pages"
+  bankedBalance: number;      // Current available balance (>= 0)
+  totalEarned: number;        // Lifetime earned
+  totalRedeemed: number;      // Lifetime redeemed
+}
+
 export interface Habit {
   id: string;
   title: string;
@@ -51,6 +60,9 @@ export interface Habit {
   linkedGoalId?: string; 
   streak: number;
   completedDates: string[]; 
+  targetAmount?: number;      // Optional measurable amount, e.g. 20
+  targetUnit?: string;        // Optional measurable unit, e.g. "pages", "reps", "min"
+  reward?: HabitReward;       // Optional Premack principle temptation bundle reward
   createdAt: string; 
   lastUpdated?: number;
 }
@@ -82,6 +94,22 @@ export interface DailyBriefing {
   priorityTask?: string; 
 }
 
+export interface WeeklyReview {
+  id: string;
+  weekStartDate: string;
+  weekEndDate: string;
+  completionRate: number;
+  habitsDone: number;
+  habitsTotal: number;
+  topHabits: string[];
+  wins: string[];
+  suggestedAdjustment: string;
+  upcomingFocus: string;
+  summary?: string;
+  reflection?: string;
+  savedAt?: string;
+}
+
 export interface AppNotification {
   id: string;
   type: 'achievement' | 'motivation' | 'reminder';
@@ -105,9 +133,11 @@ export interface UserState {
   language: AppLanguage; 
   dailyBriefing?: DailyBriefing;
   lastBriefingUpdate?: number;
+  lastWeeklyReview?: WeeklyReview;
   securitySettings: {
     pinCode: string | null;
     incognitoMode?: boolean;
+    aiDisabled?: boolean;
   };
   dashboardLayout: {
     showGrow: boolean;
