@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import http from 'http';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { GoogleGenAI, Modality } from '@google/genai';
@@ -345,6 +346,13 @@ Respond in valid JSON with:
   app.post('/api/gemini/generate-stream', async (req: Request, res: Response) => {
     const { prompt, model = MODEL, systemInstruction } = req.body;
 
+    if (!prompt || typeof prompt !== 'string' || prompt.length > 10000) {
+      return res.status(400).json({ error: 'Valid prompt under 10000 characters required.' });
+    }
+
+    const ALLOWED_MODELS = [MODEL, 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-3.8-flash'];
+    const safeModel = typeof model === 'string' && ALLOWED_MODELS.includes(model) ? model : MODEL;
+
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -353,7 +361,7 @@ Respond in valid JSON with:
     try {
       const ai = getGenAIClient();
       const responseStream = await ai.models.generateContentStream({
-        model,
+        model: safeModel,
         contents: prompt,
         config: systemInstruction ? { systemInstruction } : undefined,
       });
@@ -470,6 +478,25 @@ Respond in valid JSON with:
     }
   });
 
+  // Explicitly serve Service Worker and Web Manifest with exact headers
+  app.get('/sw.js', (_req: Request, res: Response) => {
+    res.type('application/javascript');
+    const pubPath = path.resolve(__dirname, 'public', 'sw.js');
+    if (fs.existsSync(pubPath)) return res.sendFile(pubPath);
+    const distPath = path.resolve(__dirname, 'dist', 'sw.js');
+    if (fs.existsSync(distPath)) return res.sendFile(distPath);
+    res.sendFile(path.resolve(__dirname, 'sw.js'));
+  });
+
+  app.get('/manifest.json', (_req: Request, res: Response) => {
+    res.type('application/manifest+json');
+    const pubPath = path.resolve(__dirname, 'public', 'manifest.json');
+    if (fs.existsSync(pubPath)) return res.sendFile(pubPath);
+    const distPath = path.resolve(__dirname, 'dist', 'manifest.json');
+    if (fs.existsSync(distPath)) return res.sendFile(distPath);
+    res.sendFile(path.resolve(__dirname, 'manifest.json'));
+  });
+
   // --- Vite Dev Server Middleware or Static Production Serving ---
   if (!isProduction) {
     const { createServer: createViteServer } = await import('vite');
@@ -480,7 +507,8 @@ Respond in valid JSON with:
     app.use(vite.middlewares);
   } else {
     app.use(express.static(path.resolve(__dirname, 'dist')));
-    app.get('*', (_req: Request, res: Response) => {
+    // Express 5 catch-all syntax
+    app.get('/{*splat}', (_req: Request, res: Response) => {
       res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
     });
   }

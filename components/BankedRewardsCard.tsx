@@ -215,7 +215,7 @@ export const BankedRewardsCard: React.FC<BankedRewardsCardProps> = ({
                           key={inc}
                           type="button"
                           onClick={() => handleQuickRedeem(habit, inc)}
-                          className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:border-emerald-400 dark:hover:border-emerald-500 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors shadow-2xs"
+                          className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:border-emerald-400 dark:hover:border-emerald-500 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors shadow-xs"
                         >
                           Use {inc}{reward.unit}
                         </button>
@@ -224,7 +224,7 @@ export const BankedRewardsCard: React.FC<BankedRewardsCardProps> = ({
                       <button
                         type="button"
                         onClick={() => handleQuickRedeem(habit, balance)}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold text-white ${themeClasses.primary} hover:opacity-90 transition-opacity shadow-2xs`}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold text-white ${themeClasses.primary} hover:opacity-90 transition-opacity shadow-xs`}
                       >
                         Use All ({balance}{reward.unit})
                       </button>
@@ -249,7 +249,7 @@ export const BankedRewardsCard: React.FC<BankedRewardsCardProps> = ({
 
                 {/* Custom Amount Form */}
                 {isEditingCustom && hasBalance && (
-                  <div className="mt-2.5 p-2 bg-white dark:bg-slate-850 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center gap-2 animate-in fade-in duration-150">
+                  <div className="mt-2.5 p-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center gap-2 animate-in fade-in duration-150">
                     <span className="text-xs text-slate-500 pl-1">Deduct:</span>
                     <input
                       type="number"

@@ -12,6 +12,41 @@ const GET_DAILY_FALLBACK = (_lang: AppLanguage): DailyBriefing => {
   };
 };
 
+const sanitizeJournal = (entries: JournalEntry[]) => {
+  return (entries || []).map(e => ({
+    id: e.id,
+    date: e.date,
+    title: e.title,
+    content: e.content,
+    mood: e.mood,
+    category: e.category,
+    activities: e.activities,
+    linkedGoalId: e.linkedGoalId,
+    linkedHabitId: e.linkedHabitId
+  }));
+};
+
+const sanitizeHabits = (habits: Habit[]) => {
+  return (habits || []).map(h => ({
+    id: h.id,
+    title: h.title,
+    category: h.category,
+    streak: h.streak,
+    timeOfDay: h.timeOfDay,
+    completedDates: h.completedDates?.slice(-14) || []
+  }));
+};
+
+const sanitizeGoals = (goals: Goal[]) => {
+  return (goals || []).map(g => ({
+    id: g.id,
+    title: g.title,
+    category: g.category,
+    progress: g.progress,
+    completed: g.completed
+  }));
+};
+
 export const generateGrowthAudit = async (
     habits: Habit[], 
     goals: Goal[], 
@@ -32,7 +67,12 @@ export const generateGrowthAudit = async (
         const res = await fetch(`${API_BASE}/api/gemini/growth-audit`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ habits, goals, journal, lang })
+            body: JSON.stringify({ 
+              habits: sanitizeHabits(habits), 
+              goals: sanitizeGoals(goals), 
+              journal: sanitizeJournal(journal), 
+              lang 
+            })
         });
         if (!res.ok) throw new Error(`HTTP error ${res.status}`);
         const data = await res.json();
@@ -64,7 +104,13 @@ export const generateDailyBriefing = async (
     const res = await fetch(`${API_BASE}/api/gemini/daily-briefing`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, goals, habits, recentJournal, lang })
+      body: JSON.stringify({ 
+        name, 
+        goals: sanitizeGoals(goals), 
+        habits: sanitizeHabits(habits), 
+        recentJournal: sanitizeJournal(recentJournal), 
+        lang 
+      })
     });
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
     const data = await res.json();
@@ -98,7 +144,14 @@ export const generateWeeklyReview = async (
     const res = await fetch(`${API_BASE}/api/gemini/weekly-review`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, habits, goals, recentJournal, weekStats, lang })
+      body: JSON.stringify({ 
+        name, 
+        habits: sanitizeHabits(habits), 
+        goals: sanitizeGoals(goals), 
+        recentJournal: sanitizeJournal(recentJournal), 
+        weekStats, 
+        lang 
+      })
     });
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
     const data = await res.json();
@@ -188,10 +241,12 @@ export const generateEntryInsight = async (
   lang: AppLanguage
 ): Promise<string> => {
   try {
+    // Only forward image if it is an uploaded cloud URL; do not transmit large raw base64 strings
+    const safeImage = imageData && !imageData.startsWith('data:') ? imageData : null;
     const res = await fetch(`${API_BASE}/api/gemini/entry-insight`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content, mood, goalTitle, habitTitle, imageData, lang })
+      body: JSON.stringify({ content, mood, goalTitle, habitTitle, imageData: safeImage, lang })
     });
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
     const data = await res.json();

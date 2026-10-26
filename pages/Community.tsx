@@ -69,6 +69,7 @@ export const Community: React.FC = () => {
     };
 
     const handleTranslatePost = async (post: Post) => {
+        if (securitySettings?.aiDisabled) return;
         if (translatedPosts[post.id]) {
             const { [post.id]: removed, ...rest } = translatedPosts;
             setTranslatedPosts(rest);
@@ -191,13 +192,15 @@ export const Community: React.FC = () => {
                                                     </div>
                                                 </div>
                                             </div>
-                                            <button 
-                                                onClick={() => handleTranslatePost(post)}
-                                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${translation ? `${themeClasses.secondary} ${themeClasses.text}` : 'bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-slate-600'}`}
-                                            >
-                                                {isTranslating ? <Loader2 size={12} className="animate-spin" /> : <Languages size={12} />}
-                                                {translation ? t('original_btn') : t('translate_btn')}
-                                            </button>
+                                            {!securitySettings?.aiDisabled && (
+                                                <button 
+                                                    onClick={() => handleTranslatePost(post)}
+                                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${translation ? `${themeClasses.secondary} ${themeClasses.text}` : 'bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-slate-600'}`}
+                                                >
+                                                    {isTranslating ? <Loader2 size={12} className="animate-spin" /> : <Languages size={12} />}
+                                                    {translation ? t('original_btn') : t('translate_btn')}
+                                                </button>
+                                            )}
                                         </div>
 
                                         <div onClick={() => setExpandedPostId(isExpanded ? null : post.id)} className="cursor-pointer space-y-2.5">

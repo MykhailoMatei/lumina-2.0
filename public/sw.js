@@ -1,4 +1,3 @@
-
 /**
  * Lumina Service Worker
  * Handles background notifications and PWA features
@@ -14,7 +13,6 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     Promise.all([
       self.clients.claim(),
-      // Clear old caches if necessary in the future
     ])
   );
 });
@@ -25,8 +23,7 @@ self.addEventListener('activate', (event) => {
  * and to set navigator.serviceWorker.controller to non-null.
  */
 self.addEventListener('fetch', (event) => {
-  // We can leave this empty for now or implement caching.
-  // The mere presence of this listener unlocks SW 'active' status on Android/iOS.
+  // Let browser fetch normally
 });
 
 // Allow immediate takeover via message

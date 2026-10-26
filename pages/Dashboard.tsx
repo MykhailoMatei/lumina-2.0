@@ -58,7 +58,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
     const { 
         name, avatar, goals, habits, journalEntries, toggleHabitCompletion, addHabit, updateHabit, deleteHabit,
         themeClasses, language, t, dailyBriefing, lastBriefingUpdate, 
-        updateUserPreferences, circadian, syncStatus, user, dashboardLayout, triggerNotification
+        updateUserPreferences, circadian, syncStatus, user, dashboardLayout, triggerNotification, securitySettings
     } = useApp();
     
     const [currentTodayStr, setCurrentTodayStr] = useState(getTodayString());
@@ -142,7 +142,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
         const isLastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate() === dayOfMonth;
         
         return habits.filter(h => {
-            const createdDateStr = h.createdAt.split('T')[0];
+            const createdDateStr = (h.createdAt || '').split('T')[0] || '1970-01-01';
             const isHistoricalValid = createdDateStr <= selectedDate;
             
             if (h.scheduleType === 'monthly') {
@@ -182,6 +182,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
     }, [circadian.state]);
 
     const fetchBriefing = async () => {
+        if (securitySettings?.aiDisabled || dashboardLayout?.showDailyWisdom === false) return;
         setIsRefreshing(true);
         try {
             const briefing = await generateDailyBriefing(name, goals, habits, journalEntries, language);
@@ -195,7 +196,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
 
     useEffect(() => {
         const checkBriefingStaleness = () => {
-            if (dashboardLayout?.showDailyWisdom === false) return;
+            if (dashboardLayout?.showDailyWisdom === false || securitySettings?.aiDisabled) return;
             const lastUpdate = lastBriefingUpdate ? new Date(lastBriefingUpdate) : null;
             const lastUpdateDateStr = lastUpdate ? toLocalDateString(lastUpdate) : null;
             if (lastUpdateDateStr !== currentTodayStr) {
@@ -203,10 +204,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
             }
         };
         checkBriefingStaleness();
-    }, [currentTodayStr, language, dashboardLayout?.showDailyWisdom]);
+    }, [currentTodayStr, language, dashboardLayout?.showDailyWisdom, securitySettings?.aiDisabled]);
 
     const handleAtomize = async () => {
-        if (!habitTitle.trim()) return;
+        if (!habitTitle.trim() || securitySettings?.aiDisabled) return;
         setIsAtomizing(true);
         const { suggestion } = await suggestAtomicHabit(habitTitle, language);
         setHabitTitle(suggestion);
@@ -1151,7 +1152,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                                                 <div>
                                                     <h4 className="text-xs font-semibold text-slate-800 dark:text-white flex items-center gap-1.5">
                                                         <span>Guilt-Free Reward</span>
-                                                        <span className="text-[9px] uppercase tracking-wider text-indigo-500 dark:text-indigo-400 font-semibold bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.2 rounded-md">Premack Principle</span>
+                                                        <span className="text-[9px] uppercase tracking-wider text-indigo-500 dark:text-indigo-400 font-semibold bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.5 rounded-md">Premack Principle</span>
                                                     </h4>
                                                     <p className="text-[10px] text-slate-400 font-normal">
                                                         Earn what you love after doing what matters

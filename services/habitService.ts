@@ -18,11 +18,24 @@ export interface HabitStreakResult {
 export const calculateHabitStreak = (
   completedDates: string[] = [],
   daysOfWeek: number[] = [0, 1, 2, 3, 4, 5, 6],
-  referenceDateStr?: string
+  referenceDateStr?: string,
+  scheduleType: 'weekly' | 'monthly' = 'weekly',
+  monthlyDays: number[] = []
 ): HabitStreakResult => {
   const todayStr = referenceDateStr || toLocalDateString();
   const dateSet = new Set(completedDates);
-  const scheduledDays = new Set(daysOfWeek.length > 0 ? daysOfWeek : [0, 1, 2, 3, 4, 5, 6]);
+
+  const isDayScheduled = (d: Date): boolean => {
+    if (scheduleType === 'monthly') {
+      const dayNum = d.getDate();
+      const lastDayOfMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      if ((monthlyDays || []).includes(dayNum)) return true;
+      if (dayNum === lastDayOfMonth && (monthlyDays || []).some(md => md >= dayNum)) return true;
+      return false;
+    }
+    const scheduledDays = new Set(daysOfWeek.length > 0 ? daysOfWeek : [0, 1, 2, 3, 4, 5, 6]);
+    return scheduledDays.has(d.getDay());
+  };
 
   const isCompletedToday = dateSet.has(todayStr);
 
@@ -32,7 +45,6 @@ export const calculateHabitStreak = (
   let canRecoverToday = false;
 
   const todayDate = parseLocalDate(todayStr);
-  const todayDayOfWeek = todayDate.getDay();
 
   // If completed today, start counting streak from today
   let checkDate = new Date(todayDate);
@@ -47,27 +59,27 @@ export const calculateHabitStreak = (
 
   // Walk backward day by day to count consecutive scheduled completions
   let lookbackDays = 0;
+  let scheduledOccurrencesSeen = 0;
   const MAX_LOOKBACK = 730; // 2 years safety limit
-  let missedDaysCount = 0;
 
   while (lookbackDays < MAX_LOOKBACK) {
     lookbackDays++;
-    const dayOfWeek = checkDate.getDay();
     const dateStr = toLocalDateString(checkDate);
 
     // Skip unscheduled days
-    if (!scheduledDays.has(dayOfWeek)) {
+    if (!isDayScheduled(checkDate)) {
       checkDate.setDate(checkDate.getDate() - 1);
       continue;
     }
 
     // It was a scheduled day
+    scheduledOccurrencesSeen++;
     if (dateSet.has(dateStr)) {
       streak++;
       checkDate.setDate(checkDate.getDate() - 1);
     } else {
-      // Missed a scheduled day
-      if (lookbackDays === 1 && !isCompletedToday) {
+      // Missed the most recent scheduled occurrence prior to today
+      if (scheduledOccurrencesSeen === 1 && !isCompletedToday) {
         missedYesterday = true;
         canRecoverToday = true;
       }
@@ -86,7 +98,7 @@ export const calculateHabitStreak = (
     let prevScheduledDate: Date | null = null;
 
     for (const d of sortedDates) {
-      if (!scheduledDays.has(d.getDay())) continue;
+      if (!isDayScheduled(d)) continue;
 
       if (!prevScheduledDate) {
         tempStreak = 1;
@@ -97,7 +109,7 @@ export const calculateHabitStreak = (
         let scheduledDaysBetween = 0;
 
         while (toLocalDateString(cursor) < toLocalDateString(d)) {
-          if (scheduledDays.has(cursor.getDay())) {
+          if (isDayScheduled(cursor)) {
             scheduledDaysBetween++;
           }
           cursor.setDate(cursor.getDate() + 1);

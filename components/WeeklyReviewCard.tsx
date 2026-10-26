@@ -126,7 +126,11 @@ export const WeeklyReviewCard: React.FC<WeeklyReviewCardProps> = ({
 
   // 2. Extract journal wins from the past 7 days
   const journalWins = useMemo(() => {
-    const recent = journalEntries.filter(entry => past7DatesSet.has(entry.date));
+    const getEntryDateStr = (date: string) => {
+      if (!date) return '';
+      return date.includes('T') ? toLocalDateString(new Date(date)) : date;
+    };
+    const recent = journalEntries.filter(entry => past7DatesSet.has(getEntryDateStr(entry.date)));
     const extracted: string[] = [];
 
     recent.forEach(entry => {
@@ -201,11 +205,12 @@ export const WeeklyReviewCard: React.FC<WeeklyReviewCardProps> = ({
     if (isLoadingAI || securitySettings?.aiDisabled) return;
     setIsLoadingAI(true);
     try {
+      const getEntryDateStr = (date: string) => (date?.includes('T') ? toLocalDateString(new Date(date)) : date);
       const res = await generateWeeklyReview(
         name,
         habits,
         goals,
-        journalEntries.filter(e => past7DatesSet.has(e.date)),
+        journalEntries.filter(e => past7DatesSet.has(getEntryDateStr(e.date))),
         {
           completionRate: weeklyHabitStats.completionRate,
           completedCount: weeklyHabitStats.totalCompleted,
@@ -408,7 +413,7 @@ export const WeeklyReviewCard: React.FC<WeeklyReviewCardProps> = ({
                 </span>
                 <div className="flex flex-wrap gap-2 mt-2">
                   {weeklyBankedRewards.map((r, i) => (
-                    <div key={i} className="text-xs bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 px-3 py-1.5 rounded-xl border border-emerald-200/60 dark:border-emerald-800/60 flex items-center gap-1.5 shadow-2xs font-medium">
+                    <div key={i} className="text-xs bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 px-3 py-1.5 rounded-xl border border-emerald-200/60 dark:border-emerald-800/60 flex items-center gap-1.5 shadow-xs font-medium">
                       <span>🎁</span>
                       <span>+{r.amountEarned} {r.unit} of {r.rewardTitle}</span>
                       <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-normal">

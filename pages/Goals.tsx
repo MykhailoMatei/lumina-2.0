@@ -17,7 +17,7 @@ interface GoalsProps {
 }
 
 export const Goals: React.FC<GoalsProps> = ({ setView }) => {
-    const { goals, habits, journalEntries, addGoal, updateGoal, deleteGoal, addHabit, toggleHabitCompletion, setPreselectedGoalId, themeClasses, t, language, triggerNotification } = useApp();
+    const { goals, habits, journalEntries, addGoal, updateGoal, deleteGoal, addHabit, toggleHabitCompletion, setPreselectedGoalId, themeClasses, t, language, triggerNotification, securitySettings } = useApp();
     const [activeTab, setActiveTab] = useState<'active' | 'needs' | 'hall'>('active');
     const [showModal, setShowModal] = useState(false);
     const [expandedGoalId, setExpandedGoalId] = useState<string | null>(null);
@@ -140,7 +140,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
     };
 
     const handleGenerate = async () => {
-        if (!title.trim()) return;
+        if (!title.trim() || securitySettings?.aiDisabled) return;
         setGenerating(true);
         const results = await generateMilestonesForGoal(title, language);
         setMilestones(prev => [...prev, ...(Array.isArray(results) ? results : [])]);
@@ -614,7 +614,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
             {/* ARCHIVE GOAL MODAL */}
             {showArchiveFlow && (
                 <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in">
-                    <div className="bg-white dark:bg-slate-900 w-full max-sm rounded-[2rem] p-6 shadow-2xl border border-slate-100 dark:border-slate-800 relative animate-in zoom-in-95">
+                    <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-[2rem] p-6 shadow-2xl border border-slate-100 dark:border-slate-800 relative animate-in zoom-in-95">
                         <button type="button" onClick={() => setShowArchiveFlow(null)} className="absolute top-5 right-5 p-1 text-slate-400 hover:text-slate-600 transition-colors"><X size={18}/></button>
                         <div className="text-center mb-6">
                             <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">Archive Goal</h2>
@@ -645,7 +645,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                                         value={archiveImpact}
                                         onChange={e => setArchiveImpact(e.target.value)}
                                         placeholder="This goal helped me become..."
-                                        className="w-full bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-3 text-xs font-normal italic border border-slate-100 dark:border-slate-700 outline-none h-18 resize-none text-slate-800 dark:text-slate-200"
+                                        className="w-full bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-3 text-xs font-normal italic border border-slate-100 dark:border-slate-700 outline-none h-20 resize-none text-slate-800 dark:text-slate-200"
                                     />
                                 </div>
                                 <div className="space-y-1.5">
@@ -654,7 +654,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                                         value={archiveStayed}
                                         onChange={e => setArchiveStayed(e.target.value)}
                                         placeholder="Which habits or routines took root?"
-                                        className="w-full bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-3 text-xs font-normal italic border border-slate-100 dark:border-slate-700 outline-none h-18 resize-none text-slate-800 dark:text-slate-200"
+                                        className="w-full bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-3 text-xs font-normal italic border border-slate-100 dark:border-slate-700 outline-none h-20 resize-none text-slate-800 dark:text-slate-200"
                                     />
                                 </div>
                                 <div className="space-y-1.5">
@@ -663,7 +663,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                                         value={archiveShifted}
                                         onChange={e => setArchiveShifted(e.target.value)}
                                         placeholder="How did your priorities evolve?"
-                                        className="w-full bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-3 text-xs font-normal italic border border-slate-100 dark:border-slate-700 outline-none h-18 resize-none text-slate-800 dark:text-slate-200"
+                                        className="w-full bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-3 text-xs font-normal italic border border-slate-100 dark:border-slate-700 outline-none h-20 resize-none text-slate-800 dark:text-slate-200"
                                     />
                                 </div>
                              </div>
@@ -735,14 +735,16 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                             <div className="space-y-3">
                                 <div className="flex justify-between items-center px-1">
                                     <label className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider">Milestones</label>
-                                    <button 
-                                        type="button" 
-                                        onClick={handleGenerate} 
-                                        disabled={generating || !title} 
-                                        className={`text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5 ${themeClasses.text} hover:opacity-70 transition-all disabled:opacity-30`}
-                                    >
-                                        {generating ? <Loader2 size={12} className="animate-spin"/> : <Sparkles size={12}/>} AI Milestones
-                                    </button>
+                                    {!securitySettings?.aiDisabled && (
+                                        <button 
+                                            type="button" 
+                                            onClick={handleGenerate} 
+                                            disabled={generating || !title} 
+                                            className={`text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5 ${themeClasses.text} hover:opacity-70 transition-all disabled:opacity-30`}
+                                        >
+                                            {generating ? <Loader2 size={12} className="animate-spin"/> : <Sparkles size={12}/>} AI Milestones
+                                        </button>
+                                    )}
                                 </div>
 
                                 <div className="flex gap-2">

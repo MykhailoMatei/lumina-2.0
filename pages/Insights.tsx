@@ -79,7 +79,7 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
 
   // Use the cached audit if the data hasn't changed; otherwise wait for edits to settle, then call the AI once.
   useEffect(() => {
-    if (!hasAnyData) return;
+    if (!hasAnyData || securitySettings?.aiDisabled) return;
     const cached = readCache();
     if (cached?.key === dataSignalKey) {
       setAudit(cached.audit);

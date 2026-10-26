@@ -20,21 +20,39 @@ webpush.setVapidDetails(vapidEmail, vapidPublicKey, vapidPrivateKey);
 
 Deno.serve(async (req: Request) => {
   try {
-    const authHeader = req.headers.get('Authorization')!;
+    const authHeader = req.headers.get('Authorization') || '';
+    const token = authHeader.replace(/^Bearer\s+/i, '');
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+    const isService = Boolean(token && serviceRoleKey && token === serviceRoleKey);
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, // Use Service Role for internal calls
+      serviceRoleKey, // Use Service Role for internal database operations
     );
 
     const body = await req.json();
     const { type, user_id } = body;
     let targetUserId = user_id;
 
-    // If no user_id is passed (Frontend call), get it from the JWT
-    if (!targetUserId) {
-        const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
-        if (authError || !user) return new Response('Unauthorized', { status: 401 });
-        targetUserId = user.id;
+    // Security Check: Only service role can notify other users arbitrarily
+    if (user_id && !isService) {
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+      if (authError || !user || user.id !== user_id) {
+        return new Response(JSON.stringify({ error: 'Forbidden: You can only notify yourself' }), { 
+          status: 403, 
+          headers: { 'Content-Type': 'application/json' } 
+        });
+      }
+      targetUserId = user.id;
+    } else if (!targetUserId) {
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+      if (authError || !user) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { 
+          status: 401, 
+          headers: { 'Content-Type': 'application/json' } 
+        });
+      }
+      targetUserId = user.id;
     }
 
     // 1. Fetch the user's specific push subscription
@@ -45,7 +63,10 @@ Deno.serve(async (req: Request) => {
       .single();
 
     if (subError || !subData) {
-      return new Response(JSON.stringify({ error: 'No subscription found' }), { status: 404 });
+      return new Response(JSON.stringify({ error: 'No subscription found' }), { 
+        status: 404, 
+        headers: { 'Content-Type': 'application/json' } 
+      });
     }
 
     const payload = JSON.stringify({
@@ -53,8 +74,17 @@ Deno.serve(async (req: Request) => {
       body: type === 'test' ? 'Backend signal received. Sync active! 🚀' : 'Time for your scheduled ritual.',
     });
 
-    // 2. Fire the push notification
-    await webpush.sendNotification(subData.subscription, payload);
+    // 2. Fire the push notification with cleanup on expired subscription (410/404)
+    try {
+      await webpush.sendNotification(subData.subscription, payload);
+    } catch (pushErr: any) {
+      const statusCode = Number(pushErr?.statusCode || pushErr?.status || pushErr?.code);
+      if (statusCode === 410 || statusCode === 404) {
+        // Clean up expired or unregistered subscription
+        await supabase.from('user_push_subscriptions').delete().eq('user_id', targetUserId);
+      }
+      throw pushErr;
+    }
 
     return new Response(JSON.stringify({ success: true }), {
       headers: { 'Content-Type': 'application/json' },
@@ -62,8 +92,8 @@ Deno.serve(async (req: Request) => {
 
   } catch (err: any) {
     return new Response(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }), { 
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
     });
   }
 });

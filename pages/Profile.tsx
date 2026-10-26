@@ -48,6 +48,7 @@ export const Profile: React.FC = () => {
     const [isStandalone, setIsStandalone] = useState(false);
     const [swActive, setSwActive] = useState(false);
     const [isRetryingSw, setIsRetryingSw] = useState(false);
+    const [showConfirmDelete, setShowConfirmDelete] = useState(false);
 
     /**
      * Mobile SW Detection Logic (Optimized)
@@ -185,13 +186,14 @@ export const Profile: React.FC = () => {
     };
 
     const handleTestPush = async () => {
-        const isPermitted = Notification.permission === 'granted';
+        const hasNotificationApi = typeof window !== 'undefined' && 'Notification' in window;
+        const isPermitted = hasNotificationApi && Notification.permission === 'granted';
         if (isTestingPush) return;
         setIsTestingPush(true);
         if ('vibrate' in navigator) navigator.vibrate(50);
 
         if (!isPermitted) {
-            triggerNotification("Permission Needed", "Allow notifications first.", "reminder");
+            triggerNotification("Permission Needed", hasNotificationApi ? "Allow notifications first." : "Notifications not supported on this browser.", "reminder");
             setIsTestingPush(false);
             return;
         }
@@ -253,6 +255,8 @@ export const Profile: React.FC = () => {
             const size = 400;
             canvas.width = size;
             canvas.height = size;
+            const previewWidth = 216;
+            const scaleRatio = size / previewWidth;
             const imgAspect = img.width / img.height;
             let drawW, drawH;
             if (imgAspect > 1) {
@@ -262,8 +266,8 @@ export const Profile: React.FC = () => {
                 drawW = size * zoom;
                 drawH = drawW / imgAspect;
             }
-            const x = (size - drawW) / 2 + offset.x;
-            const y = (size - drawH) / 2 + offset.y;
+            const x = (size - drawW) / 2 + (offset.x * scaleRatio);
+            const y = (size - drawH) / 2 + (offset.y * scaleRatio);
             ctx.drawImage(img, x, y, drawW, drawH);
             const croppedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
             if (user) {
@@ -337,7 +341,7 @@ export const Profile: React.FC = () => {
                             </button>
                         </div>
                     </div>
-                    <div className="flex justify-between"><span>Notifications:</span> <span className={Notification.permission === 'granted' ? 'text-emerald-400' : 'text-amber-400'}>{Notification.permission.toUpperCase()}</span></div>
+                    <div className="flex justify-between"><span>Notifications:</span> <span className={(typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') ? 'text-emerald-400' : 'text-amber-400'}>{(typeof window !== 'undefined' && 'Notification' in window) ? Notification.permission.toUpperCase() : 'UNSUPPORTED'}</span></div>
                     <div className="flex justify-between"><span>Cloud Sync:</span> <span className={user ? 'text-emerald-400' : 'text-slate-400'}>{user ? 'CONNECTED' : 'LOCAL ONLY'}</span></div>
                     <div className="mt-4 p-3 bg-white/5 rounded-xl text-white/60 leading-relaxed italic">
                         {isStandalone 
@@ -696,9 +700,37 @@ export const Profile: React.FC = () => {
 
             {/* DANGER ZONE */}
             <div className="px-2 pt-2">
-                <button onClick={deleteAccount} className="w-full py-3.5 text-rose-500 text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-2xl transition-all">
-                    <Trash2 size={14} /> {t('delete_account')}
-                </button>
+                {!showConfirmDelete ? (
+                    <button 
+                        type="button"
+                        onClick={() => setShowConfirmDelete(true)} 
+                        className="w-full py-3.5 text-rose-500 text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-2xl transition-all"
+                    >
+                        <Trash2 size={14} /> {t('delete_account')}
+                    </button>
+                ) : (
+                    <div className="p-4 bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200/80 dark:border-rose-900/50 rounded-2xl space-y-3 animate-in fade-in duration-200">
+                        <p className="text-xs text-rose-700 dark:text-rose-300 font-medium text-center">
+                            {t('delete_account_confirm')}
+                        </p>
+                        <div className="grid grid-cols-2 gap-2.5">
+                            <button
+                                type="button"
+                                onClick={() => setShowConfirmDelete(false)}
+                                className="py-2.5 px-3 rounded-xl bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold border border-slate-200 dark:border-slate-700 transition-colors"
+                            >
+                                {t('back')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={deleteAccount}
+                                className="py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-sm transition-colors"
+                            >
+                                Confirm Erase
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}

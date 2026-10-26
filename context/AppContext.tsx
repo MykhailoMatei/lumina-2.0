@@ -102,7 +102,7 @@ const BASE_TRANSLATIONS = {
   zoom_label: 'Zoom',
   back: 'Back',
   save: 'Save',
-  delete_account_confirm: 'Are you sure? This will delete all your local data.'
+  delete_account_confirm: 'Are you sure? This will permanently erase your local data and cloud records.'
 };
 
 export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
@@ -216,6 +216,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isPersistent, setIsPersistent] = useState(false);
   const [user, setUser] = useState<any>(null);
   const syncTimeoutRef = useRef<number | null>(null);
+  const isSyncApplyingRef = useRef<boolean>(false);
+  const stateRef = useRef<UserState>(state);
+  stateRef.current = state;
   const lastCheckedMinute = useRef<string | null>(null);
   const themeClasses = useMemo(() => THEMES[state.themeColor], [state.themeColor]);
 
@@ -259,16 +262,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (!enabled || !routineTimeline) return;
 
       const phases: ('Morning' | 'Afternoon' | 'Evening')[] = ['Morning', 'Afternoon', 'Evening'];
-      const today = now.toISOString().split('T')[0];
+      const today = toLocalDateString(now);
       const todayDayNum = now.getDay();
+      const todayDateNum = now.getDate();
 
       phases.forEach(phase => {
         if (routineTimeline[phase] === timeStr) {
-          const habitsToNudge = state.habits.filter(h => 
-            h.timeOfDay === phase && 
-            h.daysOfWeek.includes(todayDayNum) &&
-            !h.completedDates.includes(today)
-          );
+          const habitsToNudge = state.habits.filter(h => {
+            if (h.timeOfDay !== phase) return false;
+            if (h.completedDates.includes(today)) return false;
+            if (h.scheduleType === 'monthly') {
+              return (h.monthlyDays || []).includes(todayDateNum);
+            }
+            return (h.daysOfWeek || [0, 1, 2, 3, 4, 5, 6]).includes(todayDayNum);
+          });
           
           if (habitsToNudge.length > 0) {
             const title = `${phase} Routine`;
@@ -285,9 +292,31 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [state.habits, state.notificationSettings]);
 
   useEffect(() => {
-    localStorage.setItem('lumina_state', JSON.stringify(state));
+    try {
+      const { notifications, ...stateToSave } = state;
+      localStorage.setItem('lumina_state', JSON.stringify({ ...stateToSave, notifications: [] }));
+    } catch (e) {
+      console.warn('LocalStorage quota limit reached, trimming oversized image cache:', e);
+      try {
+        const trimmedEntries = state.journalEntries.map(entry => {
+          if (entry.imageData && entry.imageData.length > 50000) {
+            return { ...entry, imageData: undefined };
+          }
+          return entry;
+        });
+        const { notifications, ...stateToSave } = state;
+        localStorage.setItem('lumina_state', JSON.stringify({
+          ...stateToSave,
+          journalEntries: trimmedEntries,
+          notifications: []
+        }));
+      } catch (innerErr) {
+        console.error('LocalStorage critical QuotaExceededError:', innerErr);
+      }
+    }
   }, [state]);
 
+  // Auth Session & Sign-in Sync Hook
   useEffect(() => {
     if (!isSupabaseConfigured) return;
     
@@ -295,73 +324,101 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const u = session?.user ?? null;
         setUser(u);
         if (u) {
-            performCloudSync(state).then(res => {
-                if (res.success && res.data) setState(s => ({ ...s, ...res.data }));
+            performCloudSync(stateRef.current).then(res => {
+                if (res.success && res.data) {
+                    isSyncApplyingRef.current = true;
+                    setState(s => ({ ...s, ...res.data }));
+                }
             });
         }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const u = session?.user ?? null;
+      setUser(u);
+      if (u) {
+        setState(s => ({ ...s, syncStatus: { ...s.syncStatus, status: 'pending' } }));
+        const res = await performCloudSync(stateRef.current);
+        if (res.success && res.data) {
+          isSyncApplyingRef.current = true;
+          setState(s => ({
+            ...s, 
+            ...res.data
+          }));
+        }
+      }
     });
     return () => subscription.unsubscribe();
   }, []);
 
-  const triggerAutoSync = useCallback((data: UserState) => {
+  // Central debounced cloud sync
+  useEffect(() => {
     if (!user || !isSupabaseConfigured) return;
+
+    // Skip if this effect run was triggered by applying remote sync results locally
+    if (isSyncApplyingRef.current) {
+      isSyncApplyingRef.current = false;
+      return;
+    }
+
     if (syncTimeoutRef.current) window.clearTimeout(syncTimeoutRef.current);
     
-    setState(s => ({ ...s, syncStatus: { ...s.syncStatus, status: 'pending' } }));
-    
     syncTimeoutRef.current = window.setTimeout(async () => {
-        const res = await performCloudSync(data);
-        if (res.success && res.data) {
-            setState(s => ({
-              ...s, 
-              ...res.data,
-              deletedIds: { goals: [], habits: [], journalEntries: [] }
-            }));
-        } else {
-            setState(s => ({ ...s, syncStatus: { ...s.syncStatus, status: 'error' } }));
-        }
+      setState(s => ({ ...s, syncStatus: { ...s.syncStatus, status: 'pending' } }));
+      const res = await performCloudSync(stateRef.current);
+      if (res.success && res.data) {
+        isSyncApplyingRef.current = true;
+        setState(s => ({
+          ...s, 
+          ...res.data
+        }));
+      } else {
+        setState(s => ({ ...s, syncStatus: { ...s.syncStatus, status: 'error' } }));
+      }
     }, 2000);
-  }, [user]);
+
+    return () => {
+      if (syncTimeoutRef.current) window.clearTimeout(syncTimeoutRef.current);
+    };
+  }, [state.goals, state.habits, state.journalEntries, state.deletedIds, user]);
 
   const t = useCallback((key: string) => {
     return TRANSLATIONS[state.language][key] || key;
   }, [state.language]);
 
   const addGoal = (goal: Goal) => {
-    setState(prev => {
-      const newState = { ...prev, goals: [{ ...goal, lastUpdated: Date.now() }, ...prev.goals] };
-      triggerAutoSync(newState);
-      return newState;
-    });
+    setState(prev => ({
+      ...prev,
+      goals: [{ ...goal, lastUpdated: Date.now() }, ...prev.goals]
+    }));
   };
+
   const updateGoal = (id: string, updates: Partial<Goal>) => {
-    setState(prev => {
-      const newState = { ...prev, goals: prev.goals.map(g => g.id === id ? { ...g, ...updates, lastUpdated: Date.now() } : g) };
-      triggerAutoSync(newState);
-      return newState;
-    });
+    setState(prev => ({
+      ...prev,
+      goals: prev.goals.map(g => g.id === id ? { ...g, ...updates, lastUpdated: Date.now() } : g)
+    }));
   };
+
   const deleteGoal = (id: string) => {
-    setState(prev => {
-      const newState = { 
-        ...prev, 
-        goals: prev.goals.filter(g => g.id !== id),
-        deletedIds: { ...prev.deletedIds, goals: [...(prev.deletedIds?.goals || []), id] }
-      };
-      triggerAutoSync(newState);
-      return newState;
-    });
+    setState(prev => ({
+      ...prev,
+      goals: prev.goals.filter(g => g.id !== id),
+      deletedIds: { ...prev.deletedIds, goals: [...(prev.deletedIds?.goals || []), id] }
+    }));
   };
 
   const addHabit = (habit: Omit<Habit, 'createdAt' | 'daysOfWeek'> & { createdAt?: string; daysOfWeek?: number[] }) => {
     setState(prev => {
       const daysOfWeek = habit.daysOfWeek || [0, 1, 2, 3, 4, 5, 6];
       const completedDates = habit.completedDates || [];
-      const { currentStreak } = calculateHabitStreak(completedDates, daysOfWeek);
+      const { currentStreak } = calculateHabitStreak(
+        completedDates, 
+        daysOfWeek, 
+        undefined, 
+        habit.scheduleType, 
+        habit.monthlyDays
+      );
       const newHabit: Habit = {
         ...habit,
         createdAt: habit.createdAt || new Date().toISOString(),
@@ -370,69 +427,74 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         streak: currentStreak,
         lastUpdated: Date.now()
       } as Habit;
-      const newState = { ...prev, habits: [newHabit, ...prev.habits] };
-      triggerAutoSync(newState);
-      return newState;
+      return { ...prev, habits: [newHabit, ...prev.habits] };
     });
   };
+
   const updateHabit = (id: string, updates: Partial<Habit>) => {
-    setState(prev => {
-      const newState = { 
-        ...prev, 
-        habits: prev.habits.map(h => {
-          if (h.id === id) {
-            const updated = { ...h, ...updates, lastUpdated: Date.now() };
-            if (updates.completedDates || updates.daysOfWeek) {
-              const { currentStreak } = calculateHabitStreak(updated.completedDates, updated.daysOfWeek);
-              updated.streak = currentStreak;
-            }
-            return updated;
+    setState(prev => ({
+      ...prev,
+      habits: prev.habits.map(h => {
+        if (h.id === id) {
+          const updated = { ...h, ...updates, lastUpdated: Date.now() };
+          if (updates.completedDates || updates.daysOfWeek || updates.scheduleType || updates.monthlyDays) {
+            const { currentStreak } = calculateHabitStreak(
+              updated.completedDates, 
+              updated.daysOfWeek, 
+              undefined, 
+              updated.scheduleType, 
+              updated.monthlyDays
+            );
+            updated.streak = currentStreak;
           }
-          return h;
-        }) 
-      };
-      triggerAutoSync(newState);
-      return newState;
-    });
+          return updated;
+        }
+        return h;
+      })
+    }));
   };
+
   const deleteHabit = (id: string) => {
-    setState(prev => {
-      const newState = { 
-        ...prev, 
-        habits: prev.habits.filter(h => h.id !== id),
-        deletedIds: { ...prev.deletedIds, habits: [...(prev.deletedIds?.habits || []), id] }
-      };
-      triggerAutoSync(newState);
-      return newState;
-    });
+    setState(prev => ({
+      ...prev,
+      habits: prev.habits.filter(h => h.id !== id),
+      deletedIds: { ...prev.deletedIds, habits: [...(prev.deletedIds?.habits || []), id] }
+    }));
   };
   
   const toggleHabitCompletion = (id: string, date: string) => {
-    let earnedRewardMessage: { title: string; amount: number; unit: string } | null = null;
+    const habit = stateRef.current.habits.find(h => h.id === id);
+    const wasCompleted = habit ? habit.completedDates.includes(date) : false;
+    const willEarn = !!(habit?.reward && habit.reward.amount > 0 && !wasCompleted);
+    const earnedInfo = willEarn && habit?.reward ? {
+      title: habit.reward.title,
+      amount: habit.reward.amount,
+      unit: habit.reward.unit
+    } : null;
+
     setState(prev => {
       const updatedHabits = prev.habits.map(h => {
         if (h.id === id) {
           const completed = h.completedDates.includes(date);
           const newDates = completed ? h.completedDates.filter(d => d !== date) : [...h.completedDates, date];
-          const { currentStreak } = calculateHabitStreak(newDates, h.daysOfWeek);
+          const { currentStreak } = calculateHabitStreak(
+            newDates, 
+            h.daysOfWeek, 
+            undefined, 
+            h.scheduleType, 
+            h.monthlyDays
+          );
           
           let updatedReward = h.reward;
           if (h.reward && h.reward.amount > 0) {
             if (!completed) {
-              // Just completed habit -> earn reward!
               const earnAmt = h.reward.amount;
               updatedReward = {
                 ...h.reward,
                 bankedBalance: (h.reward.bankedBalance || 0) + earnAmt,
                 totalEarned: (h.reward.totalEarned || 0) + earnAmt
               };
-              earnedRewardMessage = {
-                title: h.reward.title,
-                amount: earnAmt,
-                unit: h.reward.unit
-              };
             } else {
-              // Unchecking habit -> remove banked reward safely
               const earnAmt = h.reward.amount;
               updatedReward = {
                 ...h.reward,
@@ -452,86 +514,75 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
         return h;
       });
-      const newState = { ...prev, habits: updatedHabits };
-      triggerAutoSync(newState);
-      return newState;
+      return { ...prev, habits: updatedHabits };
     });
 
-    if (earnedRewardMessage) {
-      const rewardInfo = earnedRewardMessage as { title: string; amount: number; unit: string };
-      const msg = `+${rewardInfo.amount} ${rewardInfo.unit} of ${rewardInfo.title} banked!`;
-      triggerNotification('Reward Earned 🎁', msg, 'achievement');
+    if (earnedInfo) {
+      triggerNotification('Reward Earned 🎁', `+${earnedInfo.amount} ${earnedInfo.unit} of ${earnedInfo.title} banked!`, 'achievement');
     }
   };
 
   const redeemHabitReward = (habitId: string, amount?: number) => {
-    let redeemedInfo: { title: string; amount: number; unit: string } | null = null;
+    const habit = stateRef.current.habits.find(h => h.id === habitId);
+    if (!habit || !habit.reward) return;
+    const available = habit.reward.bankedBalance || 0;
+    const toDeduct = amount !== undefined ? amount : available;
+    const actualDeduct = Math.min(available, Math.max(0, toDeduct));
+    if (actualDeduct <= 0) return;
+
+    const info = {
+      title: habit.reward.title,
+      amount: actualDeduct,
+      unit: habit.reward.unit
+    };
+
     setState(prev => {
       const updatedHabits = prev.habits.map(h => {
         if (h.id === habitId && h.reward) {
-          const available = h.reward.bankedBalance || 0;
-          const toDeduct = amount !== undefined ? amount : available;
-          const actualDeduct = Math.min(available, Math.max(0, toDeduct));
-          if (actualDeduct <= 0) return h;
-
-          redeemedInfo = {
-            title: h.reward.title,
-            amount: actualDeduct,
-            unit: h.reward.unit
-          };
-
+          const avail = h.reward.bankedBalance || 0;
+          const deduct = Math.min(avail, Math.max(0, toDeduct));
           return {
             ...h,
             reward: {
               ...h.reward,
-              bankedBalance: Math.max(0, available - actualDeduct),
-              totalRedeemed: (h.reward.totalRedeemed || 0) + actualDeduct
+              bankedBalance: Math.max(0, avail - deduct),
+              totalRedeemed: (h.reward.totalRedeemed || 0) + deduct
             },
             lastUpdated: Date.now()
           };
         }
         return h;
       });
-
-      const newState = { ...prev, habits: updatedHabits };
-      triggerAutoSync(newState);
-      return newState;
+      return { ...prev, habits: updatedHabits };
     });
 
-    if (redeemedInfo) {
-      const info = redeemedInfo as { title: string; amount: number; unit: string };
-      triggerNotification(
-        'Guilt-Free Time Enjoyed ✨', 
-        `Enjoyed ${info.amount} ${info.unit} of ${info.title}. You earned every bit of it.`, 
-        'motivation'
-      );
-    }
+    triggerNotification(
+      'Guilt-Free Time Enjoyed ✨', 
+      `Enjoyed ${info.amount} ${info.unit} of ${info.title}. You earned every bit of it.`, 
+      'motivation'
+    );
   };
 
   const addJournalEntry = (entry: JournalEntry) => {
-    setState(prev => {
-      const newState = { ...prev, journalEntries: [{ ...entry, lastUpdated: Date.now() }, ...prev.journalEntries] };
-      triggerAutoSync(newState);
-      return newState;
-    });
+    setState(prev => ({
+      ...prev,
+      journalEntries: [{ ...entry, lastUpdated: Date.now() }, ...prev.journalEntries]
+    }));
   };
+
   const updateJournalEntry = (id: string, updates: Partial<JournalEntry>) => {
-    setState(prev => {
-      const newState = { ...prev, journalEntries: prev.journalEntries.map(e => e.id === id ? { ...e, ...updates, lastUpdated: Date.now() } : e) };
-      triggerAutoSync(newState);
-      return newState;
-    });
+    setState(prev => ({
+      ...prev,
+      journalEntries: prev.journalEntries.map(e => e.id === id ? { ...e, ...updates, lastUpdated: Date.now() } : e)
+    }));
   };
+
   const deleteJournalEntry = (id: string) => {
-    setState(prev => {
-      const newState = { 
-        ...prev, 
-        journalEntries: prev.journalEntries.filter(e => e.id !== id),
-        deletedIds: { ...prev.deletedIds, journalEntries: [...(prev.deletedIds?.journalEntries || []), id] }
-      };
-      triggerAutoSync(newState);
-      return newState;
-    });
+    setState(prev => ({
+      ...prev,
+      journalEntries: prev.journalEntries.filter(e => e.id !== id),
+      deletedIds: { ...prev.deletedIds, journalEntries: [...(prev.deletedIds?.journalEntries || []), id] }
+    }));
   };
 
   const saveWeeklyReview = (review: WeeklyReview, postToJournal: boolean = false) => {
@@ -556,13 +607,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
       }
 
-      const newState = {
+      return {
         ...prev,
         lastWeeklyReview: review,
         journalEntries: updatedJournal
       };
-      triggerAutoSync(newState);
-      return newState;
     });
   };
 
@@ -581,7 +630,34 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!pin) setIsLocked(false);
   };
 
-  const deleteAccount = () => {
+  const deleteAccount = async () => {
+    try {
+      if (isSupabaseConfigured && user) {
+        await Promise.allSettled([
+          supabase.from('goals').delete().eq('user_id', user.id),
+          supabase.from('habits').delete().eq('user_id', user.id),
+          supabase.from('journal_entries').delete().eq('user_id', user.id),
+          supabase.from('user_push_subscriptions').delete().eq('user_id', user.id)
+        ]);
+
+        try {
+          const { data: avatarFiles } = await supabase.storage.from('avatars').list(user.id);
+          if (avatarFiles && avatarFiles.length > 0) {
+            await supabase.storage.from('avatars').remove(avatarFiles.map(f => `${user.id}/${f.name}`));
+          }
+          const { data: journalFiles } = await supabase.storage.from('journal').list(user.id);
+          if (journalFiles && journalFiles.length > 0) {
+            await supabase.storage.from('journal').remove(journalFiles.map(f => `${user.id}/${f.name}`));
+          }
+        } catch (storageErr) {
+          console.warn("Storage files cleanup non-fatal warning:", storageErr);
+        }
+
+        await supabase.auth.signOut();
+      }
+    } catch (e) {
+      console.warn("Cloud data wipe failed:", e);
+    }
     localStorage.removeItem('lumina_state');
     window.location.reload();
   };
@@ -591,7 +667,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `lumina_backup_${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `lumina_backup_${toLocalDateString()}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -613,7 +689,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `lumina_journal_${new Date().toISOString().split('T')[0]}.md`;
+    a.download = `lumina_journal_${toLocalDateString()}.md`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -621,9 +697,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const importData = (json: string) => {
     try {
       const data = JSON.parse(json);
-      setState(data);
+      if (!data || typeof data !== 'object') throw new Error('Invalid format');
+      setState(prev => ({
+        ...prev,
+        ...data,
+        notifications: [],
+        deletedIds: {
+          goals: Array.isArray(data.deletedIds?.goals) ? data.deletedIds.goals : [],
+          habits: Array.isArray(data.deletedIds?.habits) ? data.deletedIds.habits : [],
+          journalEntries: Array.isArray(data.deletedIds?.journalEntries) ? data.deletedIds.journalEntries : []
+        },
+        notificationSettings: {
+          ...prev.notificationSettings,
+          ...(data.notificationSettings || {})
+        },
+        dashboardLayout: {
+          ...prev.dashboardLayout,
+          ...(data.dashboardLayout || {})
+        }
+      }));
+      triggerNotification('Import Complete', t('import_success'), 'achievement');
     } catch (e) {
-      alert(t('import_failed'));
+      console.error('Import failed', e);
+      triggerNotification('Import Error', t('import_failed'), 'reminder');
     }
   };
 
@@ -656,14 +752,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const triggerNotification = (title: string, message: string, type: 'achievement' | 'motivation' | 'reminder') => {
-    const id = Date.now().toString();
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     setState(s => ({ ...s, notifications: [{ id, title, message, type }, ...(s.notifications || [])] }));
   };
 
   const dismissNotification = (id: string) => setState(s => ({ ...s, notifications: s.notifications.filter(n => n.id !== id) }));
+  
   const snoozeNotification = (id: string) => {
+    const notif = state.notifications.find(n => n.id === id);
     dismissNotification(id);
-    setTimeout(() => triggerNotification('Reminder', 'Snoozed notification is back', 'reminder'), 300000);
+    if (notif) {
+      setTimeout(() => {
+        triggerNotification(notif.title, notif.message, 'reminder');
+      }, 300000);
+    }
   };
 
   const toggleResourceFavorite = (id: string) => {
