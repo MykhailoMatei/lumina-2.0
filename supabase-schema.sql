@@ -134,8 +134,8 @@ values ('avatars', 'avatars', true)
 on conflict (id) do update set public = true;
 
 insert into storage.buckets (id, name, public) 
-values ('journal', 'journal', true)
-on conflict (id) do update set public = true;
+values ('journal', 'journal', false)
+on conflict (id) do update set public = false;
 
 -- Storage policies: authenticated users can access and manage their own folders
 drop policy if exists "Users can upload their own avatars" on storage.objects;
@@ -159,5 +159,3 @@ create policy "Users can manage their own journal photos" on storage.objects
     for all using (bucket_id = 'journal' and (storage.foldername(name))[1] = auth.uid()::text);
 
 drop policy if exists "Journal photos are publicly viewable" on storage.objects;
-create policy "Journal photos are publicly viewable" on storage.objects
-    for select using (bucket_id = 'journal');

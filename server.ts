@@ -30,10 +30,32 @@ const supabaseAdmin = SUPABASE_SERVICE_ROLE_KEY
     })
   : null;
 
-// Per-user and anonymous rate limiter for AI routes
+// Rate limiters: per-minute window and daily cap per authenticated user
 const userRequestCounts = new Map<string, { count: number; resetTime: number }>();
+const userDailyCounts = new Map<string, { date: string; count: number }>();
+
+// Periodic memory cleanup every 10 minutes to prevent maps from growing indefinitely
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, val] of userRequestCounts.entries()) {
+    if (now > val.resetTime) {
+      userRequestCounts.delete(key);
+    }
+  }
+  const todayStr = new Date().toISOString().slice(0, 10);
+  for (const [key, val] of userDailyCounts.entries()) {
+    if (val.date !== todayStr) {
+      userDailyCounts.delete(key);
+    }
+  }
+}, 10 * 60 * 1000);
 
 const geminiAuthAndRateLimiter = async (req: Request, res: Response, next: NextFunction) => {
+  // Allow health test check without user session
+  if (req.path === '/test-connection') {
+    return next();
+  }
+
   const authHeader = req.headers.authorization;
   let userId: string | null = null;
 
@@ -52,12 +74,31 @@ const geminiAuthAndRateLimiter = async (req: Request, res: Response, next: NextF
     }
   }
 
-  // Rate limit key: User ID if authenticated, else IP address
-  const clientKey = userId ? `user:${userId}` : `ip:${req.ip || req.socket.remoteAddress || 'unknown'}`;
+  // Closed Beta Policy: Generative AI endpoints require an authenticated user account
+  if (!userId) {
+    return res.status(401).json({
+      error: 'Please sign in or create an account to access AI features during the closed beta.',
+    });
+  }
+
+  // 1. Check daily cap (100 AI requests per user per calendar day)
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const daily = userDailyCounts.get(userId);
+  if (!daily || daily.date !== todayStr) {
+    userDailyCounts.set(userId, { date: todayStr, count: 1 });
+  } else if (daily.count >= 100) {
+    return res.status(429).json({
+      error: 'Daily AI generation quota reached (100 requests/day). Your quota will reset at midnight.',
+    });
+  } else {
+    daily.count++;
+  }
+
+  // 2. Check per-minute burst rate limit (60 req/minute per user)
+  const clientKey = `user:${userId}`;
   const now = Date.now();
   const windowMs = 60 * 1000;
-  // Authenticated users get 60 req/min; anonymous gets 15 req/min
-  const limit = userId ? 60 : 15;
+  const limit = 60;
 
   const current = userRequestCounts.get(clientKey);
   if (!current || now > current.resetTime) {
@@ -119,6 +160,9 @@ async function startServer() {
   const app = express();
   const server = http.createServer(app);
 
+  // Trust proxy for correct IP identification behind reverse proxy
+  app.set('trust proxy', 1);
+
   // Enable CORS
   app.use(cors({
     origin: true,
@@ -131,14 +175,28 @@ async function startServer() {
   app.use(express.json({ limit: '30mb' }));
   app.use(express.urlencoded({ extended: true, limit: '30mb' }));
 
+  // Remote error reporting endpoint for client error monitoring
+  app.post('/api/errors/report', (req: Request, res: Response) => {
+    const { message, stack, context, timestamp } = req.body || {};
+    console.error(`[Remote Tester Error] [${context || 'client'}] ${message}`, stack ? `\nStack: ${stack}` : '');
+    res.json({ success: true });
+  });
+
   // Apply auth and rate limiter to all Gemini AI proxy routes
   app.use('/api/gemini', geminiAuthAndRateLimiter);
 
-  // --- Account Deletion Endpoint (Full Supabase Auth & Storage Wipe) ---
+  // --- Account Deletion Endpoint (Admin Service Role Verified Wipe) ---
   app.delete('/api/account/delete', async (req: Request, res: Response) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Authentication required to delete account.' });
+    }
+
+    if (!supabaseAdmin) {
+      console.error('[Account Delete] SUPABASE_SERVICE_ROLE_KEY is missing on server.');
+      return res.status(503).json({
+        error: 'Account deletion requires SUPABASE_SERVICE_ROLE_KEY to be configured on the server.',
+      });
     }
 
     const token = authHeader.slice(7).trim();
@@ -150,37 +208,45 @@ async function startServer() {
 
       const userId = user.id;
 
-      // 1. Purge database records
-      await Promise.allSettled([
-        supabaseServer.from('goals').delete().eq('user_id', userId),
-        supabaseServer.from('habits').delete().eq('user_id', userId),
-        supabaseServer.from('journal_entries').delete().eq('user_id', userId),
-        supabaseServer.from('user_push_subscriptions').delete().eq('user_id', userId),
+      // 1. Purge database records using admin privileges (bypassing RLS constraints)
+      const [goalsRes, habitsRes, journalRes, pushRes] = await Promise.all([
+        supabaseAdmin.from('goals').delete().eq('user_id', userId),
+        supabaseAdmin.from('habits').delete().eq('user_id', userId),
+        supabaseAdmin.from('journal_entries').delete().eq('user_id', userId),
+        supabaseAdmin.from('user_push_subscriptions').delete().eq('user_id', userId),
       ]);
 
-      // 2. Purge user files from storage
+      if (goalsRes.error || habitsRes.error || journalRes.error || pushRes.error) {
+        console.warn('[Account Delete] Partial table purge warning:', {
+          goals: goalsRes.error?.message,
+          habits: habitsRes.error?.message,
+          journal: journalRes.error?.message,
+          push: pushRes.error?.message,
+        });
+      }
+
+      // 2. Purge user files from storage using admin client
       try {
-        const { data: avatars } = await supabaseServer.storage.from('avatars').list(userId);
+        const { data: avatars } = await supabaseAdmin.storage.from('avatars').list(userId);
         if (avatars && avatars.length > 0) {
-          await supabaseServer.storage.from('avatars').remove(avatars.map((f: any) => `${userId}/${f.name}`));
+          await supabaseAdmin.storage.from('avatars').remove(avatars.map((f: any) => `${userId}/${f.name}`));
         }
-        const { data: journalFiles } = await supabaseServer.storage.from('journal').list(userId);
+        const { data: journalFiles } = await supabaseAdmin.storage.from('journal').list(userId);
         if (journalFiles && journalFiles.length > 0) {
-          await supabaseServer.storage.from('journal').remove(journalFiles.map((f: any) => `${userId}/${f.name}`));
+          await supabaseAdmin.storage.from('journal').remove(journalFiles.map((f: any) => `${userId}/${f.name}`));
         }
       } catch (storageErr) {
         console.warn('[Account Delete] Storage cleanup warning:', storageErr);
       }
 
-      // 3. Complete deletion from auth.users using admin service role key if configured
-      if (supabaseAdmin) {
-        const { error: delErr } = await supabaseAdmin.auth.admin.deleteUser(userId);
-        if (delErr) {
-          console.error('[Account Delete] Auth admin delete error:', delErr);
-        }
+      // 3. Delete the auth user from Supabase auth.users
+      const { error: delErr } = await supabaseAdmin.auth.admin.deleteUser(userId);
+      if (delErr) {
+        console.error('[Account Delete] Auth admin deleteUser error:', delErr);
+        return res.status(500).json({ error: `Failed to remove user account: ${delErr.message}` });
       }
 
-      return res.json({ success: true, message: 'Account and associated records deleted permanently.' });
+      return res.json({ success: true, message: 'Account, data, and authentication record deleted permanently.' });
     } catch (err: any) {
       console.error('[Account Delete] Unexpected error:', err);
       return res.status(500).json({ error: err.message || 'Failed to delete account' });

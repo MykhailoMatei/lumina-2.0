@@ -25,7 +25,7 @@ const THEME_HEX_MAP: Record<string, string> = {
 };
 
 export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }) => {
-  const { habits, goals, journalEntries, themeColor, themeClasses, language, t, securitySettings } = useApp();
+  const { habits, goals, journalEntries, themeColor, themeClasses, language, t, securitySettings, aiConsentGranted } = useApp();
   const [timeframe, setTimeframe] = useState<'Week' | 'Month'>('Month');
   const [audit, setAudit] = useState<any>(null);
   const [loadingAudit, setLoadingAudit] = useState(false);
@@ -47,8 +47,8 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
     const habitKey = habits.map(h => `${h.id}-${h.completedDates.length}-${h.streak}`).join('|');
     const journalKey = journalEntries.length > 0 ? journalEntries[0].id + journalEntries[0].content.length : 'none';
     const goalKey = goals.map(g => `${g.id}-${g.progress}`).join('|');
-    return `${language}::${habitKey}::${journalKey}::${goalKey}`;
-  }, [habits, journalEntries, goals, language]);
+    return `${language}::${habitKey}::${journalKey}::${goalKey}::${!!aiConsentGranted}`;
+  }, [habits, journalEntries, goals, language, aiConsentGranted]);
 
   const readCache = () => {
     try { return JSON.parse(localStorage.getItem(AUDIT_CACHE_KEY) || 'null'); } catch { return null; }
@@ -59,7 +59,7 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
     loadingRef.current = true;
     setLoadingAudit(true);
     try {
-      const res = await generateGrowthAudit(habits, goals, journalEntries, language);
+      const res = await generateGrowthAudit(habits, goals, journalEntries, language, !!aiConsentGranted);
       const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       setAudit(res);
       setLastAuditTime(nowStr);
@@ -75,7 +75,7 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
       loadingRef.current = false;
       setTimeout(() => setLoadingAudit(false), 800);
     }
-  }, [habits, goals, journalEntries, language, hasAnyData, dataSignalKey, securitySettings?.aiDisabled]);
+  }, [habits, goals, journalEntries, language, hasAnyData, dataSignalKey, securitySettings?.aiDisabled, aiConsentGranted]);
 
   // Use the cached audit if the data hasn't changed; otherwise wait for edits to settle, then call the AI once.
   useEffect(() => {

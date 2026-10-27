@@ -49,6 +49,17 @@ export const logClientError = (error: any, context = 'general') => {
 
     console.warn('[Lumina Monitor]', entry.message);
 
+    // Forward error to server-side telemetry endpoint
+    try {
+      fetch('/api/errors/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(entry),
+      }).catch(() => {});
+    } catch {
+      // ignore
+    }
+
     const existingRaw = localStorage.getItem(ERROR_LOG_KEY);
     const existing: ErrorLogEntry[] = existingRaw ? JSON.parse(existingRaw) : [];
     const cleanExisting = existing.filter(e => !shouldIgnoreError(e.message, e.stack));

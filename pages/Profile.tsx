@@ -275,8 +275,12 @@ export const Profile: React.FC = () => {
             const croppedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
             if (user) {
                 const cloudUrl = await uploadImage('avatars', `${user.id}/avatar`, croppedDataUrl);
-                if (cloudUrl) updateUserPreferences({ avatar: cloudUrl });
-                else updateUserPreferences({ avatar: croppedDataUrl });
+                if (cloudUrl) {
+                    const cacheBusted = cloudUrl.includes('?') ? `${cloudUrl}&v=${Date.now()}` : `${cloudUrl}?v=${Date.now()}`;
+                    updateUserPreferences({ avatar: cacheBusted });
+                } else {
+                    updateUserPreferences({ avatar: croppedDataUrl });
+                }
             } else {
                 updateUserPreferences({ avatar: croppedDataUrl });
             }

@@ -28,17 +28,15 @@ const GET_DAILY_FALLBACK = (_lang: AppLanguage): DailyBriefing => {
   };
 };
 
-const sanitizeJournal = (entries: JournalEntry[]) => {
-  return (entries || []).map(e => ({
+const sanitizeJournal = (entries: JournalEntry[], aiConsentGranted: boolean = false) => {
+  return (entries || []).slice(0, 5).map(e => ({
     id: e.id,
     date: e.date,
-    title: e.title,
-    content: e.content,
     mood: e.mood,
     category: e.category,
-    activities: e.activities,
-    linkedGoalId: e.linkedGoalId,
-    linkedHabitId: e.linkedHabitId
+    title: aiConsentGranted ? (e.title || '').slice(0, 50) : '',
+    content: aiConsentGranted ? (e.content || '').slice(0, 150) : '',
+    activities: aiConsentGranted ? e.activities : []
   }));
 };
 
@@ -67,7 +65,8 @@ export const generateGrowthAudit = async (
     habits: Habit[], 
     goals: Goal[], 
     journal: JournalEntry[], 
-    lang: AppLanguage
+    lang: AppLanguage,
+    aiConsentGranted: boolean = false
 ): Promise<{ 
   summary: string, 
   correlation: string, 
@@ -87,7 +86,7 @@ export const generateGrowthAudit = async (
             body: JSON.stringify({ 
               habits: sanitizeHabits(habits), 
               goals: sanitizeGoals(goals), 
-              journal: sanitizeJournal(journal), 
+              journal: sanitizeJournal(journal, aiConsentGranted), 
               lang 
             })
         });
@@ -151,7 +150,8 @@ export const generateWeeklyReview = async (
   goals: Goal[],
   recentJournal: JournalEntry[],
   weekStats: { completionRate: number; completedCount: number; scheduledCount: number },
-  lang: AppLanguage
+  lang: AppLanguage,
+  aiConsentGranted: boolean = false
 ): Promise<{
   summary: string;
   keyWin: string;
@@ -167,7 +167,7 @@ export const generateWeeklyReview = async (
         name, 
         habits: sanitizeHabits(habits), 
         goals: sanitizeGoals(goals), 
-        recentJournal: sanitizeJournal(recentJournal), 
+        recentJournal: sanitizeJournal(recentJournal, aiConsentGranted), 
         weekStats, 
         lang 
       })

@@ -1,3 +1,4 @@
+import { JournalImage } from '../components/JournalImage';
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
@@ -780,7 +781,7 @@ export const Journal: React.FC = () => {
                                     <div className="px-3.5 sm:px-4 pb-2">
                                         {isExpanded ? (
                                             <div className="w-full h-48 rounded-xl overflow-hidden shadow-inner border border-slate-100 dark:border-slate-800 mt-2">
-                                                <img src={entry.imageData} className="w-full h-full object-cover" alt="Memory" />
+                                                <JournalImage src={entry.imageData} className="w-full h-full object-cover" alt="Memory" />
                                             </div>
                                         ) : (
                                             <div 
@@ -788,7 +789,7 @@ export const Journal: React.FC = () => {
                                                 className="flex items-center gap-2 mt-1 cursor-pointer text-slate-400 hover:text-slate-600"
                                             >
                                                 <div className="w-8 h-8 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 shrink-0">
-                                                    <img src={entry.imageData} className="w-full h-full object-cover" alt="Thumb" />
+                                                    <JournalImage src={entry.imageData} className="w-full h-full object-cover" alt="Thumb" />
                                                 </div>
                                                 <span className="text-[11px] text-slate-400 font-medium">1 photo attached</span>
                                             </div>

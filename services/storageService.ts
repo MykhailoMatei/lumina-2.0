@@ -46,15 +46,9 @@ export const uploadImage = async (
 
         if (error) throw error;
 
-        // If bucket is journal (private), generate a long-lived signed URL (1 year) so it loads in <img> tags
+        // If bucket is journal (private), store the durable storage path; signed URLs will be created on display
         if (bucket === 'journal') {
-            const { data: signedData, error: signError } = await supabase.storage
-                .from(bucket)
-                .createSignedUrl(data.path, 60 * 60 * 24 * 365); // 1 year
-            
-            if (!signError && signedData?.signedUrl) {
-                return signedData.signedUrl;
-            }
+            return data.path;
         }
 
         // Avatars bucket is public, so getPublicUrl works
@@ -72,7 +66,41 @@ export const uploadImage = async (
 /**
  * Resolves a signed URL for private journal storage paths if an expired or relative path is passed.
  */
+const signedUrlCache = new Map<string, { url: string; expires: number }>();
+
 export const getJournalImageSignedUrl = async (pathOrUrl: string): Promise<string> => {
+    if (!pathOrUrl || !isSupabaseConfigured) return pathOrUrl;
+    if (pathOrUrl.startsWith('data:') || pathOrUrl.startsWith('blob:')) return pathOrUrl;
+
+    const now = Date.now();
+    const cached = signedUrlCache.get(pathOrUrl);
+    if (cached && now < cached.expires) {
+        return cached.url;
+    }
+
+    try {
+        let storagePath = pathOrUrl;
+        if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
+            const match = pathOrUrl.match(/\/journal\/(.*?)(\?|$)/);
+            if (match && match[1]) {
+                storagePath = decodeURIComponent(match[1]);
+            } else {
+                return pathOrUrl;
+            }
+        }
+
+        const { data, error } = await supabase.storage.from('journal').createSignedUrl(storagePath, 60 * 60 * 24);
+        if (!error && data?.signedUrl) {
+            signedUrlCache.set(pathOrUrl, { url: data.signedUrl, expires: now + 23 * 60 * 60 * 1000 });
+            return data.signedUrl;
+        }
+        return pathOrUrl;
+    } catch {
+        return pathOrUrl;
+    }
+};
+
+const _unusedLegacySign = async (pathOrUrl: string) => {
     if (!pathOrUrl || !isSupabaseConfigured) return pathOrUrl;
     if (pathOrUrl.startsWith('data:') || pathOrUrl.startsWith('blob:')) return pathOrUrl;
 
