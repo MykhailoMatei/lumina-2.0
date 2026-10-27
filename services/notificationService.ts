@@ -60,11 +60,20 @@ export const subscribeToPush = async (userId: string | null) => {
 
         if (subscription) {
             // Save to the table 'user_push_subscriptions'
-            const { error } = await supabase.from('user_push_subscriptions').upsert({
+            let { error } = await supabase.from('user_push_subscriptions').upsert({
                 user_id: userId,
                 subscription: subscription.toJSON(),
                 updated_at: new Date().toISOString()
             });
+
+            // If the column updated_at doesn't exist yet on remote table, fallback without updated_at
+            if (error && (error.message?.includes('updated_at') || (error as any).code === 'PGRST204' || (error as any).code === '42703')) {
+                const retryRes = await supabase.from('user_push_subscriptions').upsert({
+                    user_id: userId,
+                    subscription: subscription.toJSON()
+                });
+                error = retryRes.error;
+            }
 
             if (error) throw error;
         }

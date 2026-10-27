@@ -94,8 +94,12 @@ alter table public.journal_entries add column if not exists last_updated bigint 
 create table if not exists public.user_push_subscriptions (
     user_id uuid references auth.users(id) on delete cascade primary key,
     subscription jsonb not null,
-    created_at timestamptz not null default now()
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
 );
+
+-- Migration for existing user_push_subscriptions
+alter table public.user_push_subscriptions add column if not exists updated_at timestamptz default now();
 
 -- 6. Enable Row Level Security (RLS)
 alter table public.goals enable row level security;
@@ -130,8 +134,8 @@ values ('avatars', 'avatars', true)
 on conflict (id) do update set public = true;
 
 insert into storage.buckets (id, name, public) 
-values ('journal', 'journal', false)
-on conflict (id) do nothing;
+values ('journal', 'journal', true)
+on conflict (id) do update set public = true;
 
 -- Storage policies: authenticated users can access and manage their own folders
 drop policy if exists "Users can upload their own avatars" on storage.objects;
@@ -153,3 +157,7 @@ create policy "Avatars are publicly viewable" on storage.objects
 drop policy if exists "Users can manage their own journal photos" on storage.objects;
 create policy "Users can manage their own journal photos" on storage.objects
     for all using (bucket_id = 'journal' and (storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "Journal photos are publicly viewable" on storage.objects;
+create policy "Journal photos are publicly viewable" on storage.objects
+    for select using (bucket_id = 'journal');

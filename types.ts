@@ -134,8 +134,10 @@ export interface UserState {
   dailyBriefing?: DailyBriefing;
   lastBriefingUpdate?: number;
   lastWeeklyReview?: WeeklyReview;
+  aiConsentGranted?: boolean;
   securitySettings: {
     pinCode: string | null;
+    pinHashed?: boolean;
     incognitoMode?: boolean;
     aiDisabled?: boolean;
   };

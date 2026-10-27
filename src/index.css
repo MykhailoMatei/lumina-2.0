@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --color-slate-950: #020617;
+  
+  --animate-pop-haptic: pop-haptic 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  --animate-check-draw: check-draw 0.3s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+  --animate-sparkle: sparkle 2s ease-in-out infinite;
+  --animate-float: float 3s ease-in-out infinite;
+  --animate-reward-pulse: reward-pulse 2s infinite;
+  --animate-pulse-slow: pulse-slow 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-slide-up: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-shimmer: shimmer 2s linear infinite;
+
+  @keyframes pop-haptic {
+    0% { transform: scale(1); }
+    40% { transform: scale(0.92); }
+    100% { transform: scale(1); }
+  }
+  @keyframes check-draw {
+    0% { transform: scale(0.5) rotate(-10deg); opacity: 0; }
+    100% { transform: scale(1) rotate(0); opacity: 1; }
+  }
+  @keyframes sparkle {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(1.15); }
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+  @keyframes reward-pulse {
+    0% { box-shadow: 0 0 10px rgba(99, 102, 241, 0.2); }
+    50% { box-shadow: 0 0 40px rgba(99, 102, 241, 0.4); }
+    100% { box-shadow: 0 0 10px rgba(99, 102, 241, 0.2); }
+  }
+  @keyframes pulse-slow {
+    0%, 100% { opacity: 0.2; }
+    50% { opacity: 0.5; }
+  }
+  @keyframes slide-up {
+    0% { transform: translateY(20px); opacity: 0; }
+    100% { transform: translateY(0); opacity: 1; }
+  }
+  @keyframes shimmer {
+    from { background-position: 200% 0; }
+    to { background-position: -200% 0; }
+  }
+}
+
+body {
+  background-color: #f8fafc;
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+  font-family: 'Inter', sans-serif;
+  transition: background-color 0.4s ease;
+  overflow: hidden;
+}
+
+html.dark body {
+  background-color: #020617;
+  color: #f1f5f9;
+}
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+.pt-safe-content { padding-top: calc(env(safe-area-inset-top) + 1rem); }
+
+.haptic-btn:active {
+  transform: scale(0.96);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.dark .glass-card {
+  background: rgba(15, 23, 42, 0.7);
+}
+
+* {
+  transition-property: background-color, border-color, color, opacity, transform;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 0.2s;
+}

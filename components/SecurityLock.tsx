@@ -20,8 +20,8 @@ export const SecurityLock: React.FC = () => {
 
     useEffect(() => {
         if (pin.length === 4) {
-            setTimeout(() => {
-                const success = unlockApp(pin);
+            setTimeout(async () => {
+                const success = await unlockApp(pin);
                 if (!success) {
                     setError(true);
                     setPin('');

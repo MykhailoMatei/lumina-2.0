@@ -602,7 +602,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                         ) : (
                             filteredHabits.map(h => {
                                 const isDone = h.completedDates.includes(selectedDate);
-                                const streakInfo = calculateHabitStreak(h.completedDates, h.daysOfWeek, selectedDate);
+                                const streakInfo = calculateHabitStreak(h.completedDates, h.daysOfWeek, selectedDate, h.scheduleType, h.monthlyDays);
                                 const showRecoveryBadge = streakInfo.canRecoverToday && !isDone && selectedDate === currentTodayStr;
 
                                 return (

@@ -1,6 +1,22 @@
 import { Goal, AppLanguage, Habit, JournalEntry, DailyBriefing } from "../types";
+import { supabase, isSupabaseConfigured } from "./supabaseClient";
 
 const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '');
+
+const getAuthHeaders = async (): Promise<Record<string, string>> => {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  try {
+    if (isSupabaseConfigured) {
+      const { data } = await supabase.auth.getSession();
+      if (data?.session?.access_token) {
+        headers['Authorization'] = `Bearer ${data.session.access_token}`;
+      }
+    }
+  } catch (err) {
+    // non-fatal, fallback to anonymous
+  }
+  return headers;
+};
 
 const GET_DAILY_FALLBACK = (_lang: AppLanguage): DailyBriefing => {
   return {
@@ -64,9 +80,10 @@ export const generateGrowthAudit = async (
   isCalibrating: boolean
 }> => {
     try {
+        const headers = await getAuthHeaders();
         const res = await fetch(`${API_BASE}/api/gemini/growth-audit`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify({ 
               habits: sanitizeHabits(habits), 
               goals: sanitizeGoals(goals), 
@@ -101,9 +118,10 @@ export const generateDailyBriefing = async (
     lang: AppLanguage
 ): Promise<DailyBriefing> => {
   try {
+    const headers = await getAuthHeaders();
     const res = await fetch(`${API_BASE}/api/gemini/daily-briefing`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ 
         name, 
         goals: sanitizeGoals(goals), 
@@ -141,9 +159,10 @@ export const generateWeeklyReview = async (
   upcomingFocus: string;
 }> => {
   try {
+    const headers = await getAuthHeaders();
     const res = await fetch(`${API_BASE}/api/gemini/weekly-review`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ 
         name, 
         habits: sanitizeHabits(habits), 
@@ -174,7 +193,8 @@ export const generateWeeklyReview = async (
 
 export const testApiConnection = async (): Promise<{ success: boolean; message: string }> => {
   try {
-    const res = await fetch(`${API_BASE}/api/gemini/test-connection`);
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_BASE}/api/gemini/test-connection`, { headers });
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
       return { success: false, message: errData.message || `Server returned ${res.status}` };
@@ -188,9 +208,10 @@ export const testApiConnection = async (): Promise<{ success: boolean; message: 
 
 export const suggestAtomicHabit = async (habitTitle: string, lang: AppLanguage): Promise<{ suggestion: string; reason: string }> => {
   try {
+    const headers = await getAuthHeaders();
     const res = await fetch(`${API_BASE}/api/gemini/atomic-habit`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ habitTitle, lang })
     });
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
@@ -203,9 +224,10 @@ export const suggestAtomicHabit = async (habitTitle: string, lang: AppLanguage):
 
 export const generateMilestonesForGoal = async (goalTitle: string, lang: AppLanguage): Promise<string[]> => {
   try {
+    const headers = await getAuthHeaders();
     const res = await fetch(`${API_BASE}/api/gemini/goal-milestones`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ goalTitle, lang })
     });
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
@@ -219,9 +241,10 @@ export const generateMilestonesForGoal = async (goalTitle: string, lang: AppLang
 
 export const translateContent = async (title: string, content: string, lang: AppLanguage): Promise<{ title: string; content: string }> => {
   try {
+    const headers = await getAuthHeaders();
     const res = await fetch(`${API_BASE}/api/gemini/translate`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ title, content, lang })
     });
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
@@ -241,12 +264,11 @@ export const generateEntryInsight = async (
   lang: AppLanguage
 ): Promise<string> => {
   try {
-    // Only forward image if it is an uploaded cloud URL; do not transmit large raw base64 strings
-    const safeImage = imageData && !imageData.startsWith('data:') ? imageData : null;
+    const headers = await getAuthHeaders();
     const res = await fetch(`${API_BASE}/api/gemini/entry-insight`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content, mood, goalTitle, habitTitle, imageData: safeImage, lang })
+      headers,
+      body: JSON.stringify({ content, mood, goalTitle, habitTitle, imageData: imageData || null, lang })
     });
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
     const data = await res.json();
@@ -267,9 +289,10 @@ export const streamGeminiContent = async (
   onError?: (err: any) => void
 ): Promise<void> => {
   try {
+    const headers = await getAuthHeaders();
     const response = await fetch(`${API_BASE}/api/gemini/generate-stream`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ prompt }),
     });
 

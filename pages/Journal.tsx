@@ -147,7 +147,7 @@ export const Journal: React.FC = () => {
     const { 
         journalEntries, addJournalEntry, updateJournalEntry, deleteJournalEntry, goals, habits, user,
         themeClasses, language, dailyBriefing, preselectedGoalId, setPreselectedGoalId, circadian,
-        triggerNotification, securitySettings
+        triggerNotification, securitySettings, aiConsentGranted, updateUserPreferences, t
     } = useApp();
     
     // Editor Wizard State
@@ -395,7 +395,8 @@ export const Journal: React.FC = () => {
                 const linkedHabit = habits.find(h => h.id === habitId);
                 
                 let insight: string | null = null;
-                if (!securitySettings?.aiDisabled) {
+                // Strict user privacy consent: only send journal text if explicitly consented
+                if (aiConsentGranted && !securitySettings?.aiDisabled) {
                     insight = await generateEntryInsight(
                         rawContent, 
                         selectedMood, 
@@ -443,7 +444,7 @@ export const Journal: React.FC = () => {
 
         (async () => {
             try {
-                if (!securitySettings?.aiDisabled) {
+                if (aiConsentGranted && !securitySettings?.aiDisabled) {
                     const insight = await generateEntryInsight(raw, 'Good', null, null, null, language);
                     if (insight) {
                         updateJournalEntry(targetId, { aiInsight: insight });
@@ -573,6 +574,33 @@ export const Journal: React.FC = () => {
                     <span>+ Folder</span>
                 </button>
             </div>
+
+            {/* AI REFLECTION OPT-IN BANNER (EXPLICIT CONSENT) */}
+            {!aiConsentGranted && !securitySettings?.aiDisabled && (
+                <div className="bg-gradient-to-r from-indigo-50/90 to-purple-50/90 dark:from-indigo-950/40 dark:to-purple-950/40 border border-indigo-100 dark:border-indigo-900/40 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+                    <div className="flex items-start gap-3">
+                        <div className="w-8 h-8 rounded-xl bg-indigo-500/10 dark:bg-indigo-400/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 mt-0.5">
+                            <Sparkles size={16} />
+                        </div>
+                        <div className="space-y-0.5">
+                            <h4 className="text-xs font-semibold text-slate-900 dark:text-slate-100">{t('ai_consent_prompt_title')}</h4>
+                            <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed max-w-md">
+                                {t('ai_consent_prompt_text')}
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            updateUserPreferences({ aiConsentGranted: true });
+                            triggerNotification('AI Reflections Active', 'Lumina will now synthesize gentle observations on your entries.', 'achievement');
+                        }}
+                        className="shrink-0 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm active:scale-95 transition-all"
+                    >
+                        {t('ai_consent_enable')}
+                    </button>
+                </div>
+            )}
 
             {/* SEARCH BAR (WHEN ENTRIES EXIST) */}
             {journalEntries.length > 0 && (

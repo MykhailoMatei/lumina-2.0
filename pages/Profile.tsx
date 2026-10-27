@@ -6,10 +6,11 @@ import {
     Check, Lock, X, Move, ZoomIn, Camera,
     ShieldCheck, Loader2, Cloud, CloudOff, Link2, LogOut, ArrowRight,
     RefreshCw, BellRing, Clock, Key, ShieldAlert, Smartphone, Zap, Info, Activity, Database, Sparkles,
-    Download, FileText
+    Download, FileText, ChevronRight
 } from 'lucide-react';
 import { uploadImage } from '../services/storageService';
 import { AuthModal } from '../components/AuthModal';
+import { PrivacyPolicy } from '../components/PrivacyPolicy';
 import { requestNotificationPermission, sendSystemNotification, subscribeToPush, triggerBackendTestNudge } from '../services/notificationService';
 
 const LANGUAGES: AppLanguage[] = ['English', 'French', 'German', 'Ukrainian', 'Spanish'];
@@ -18,7 +19,7 @@ const AVATARS = ['🌱', '🌿', '🌳', '🚀', '🧠', '✨', '🧘', '🔥', 
 export const Profile: React.FC = () => {
     const { 
         name, avatar, theme, themeColor, language, themeClasses, 
-        securitySettings, syncStatus, user, notificationSettings,
+        securitySettings, syncStatus, user, notificationSettings, aiConsentGranted,
         updateUserPreferences, deleteAccount, t, setPinCode, 
         syncWithCloud, signOut, triggerNotification, dashboardLayout,
         exportData, exportJournalMarkdown
@@ -30,6 +31,7 @@ export const Profile: React.FC = () => {
     const [editingName, setEditingName] = useState(false);
     const [tempName, setTempName] = useState(name);
     const [showAuth, setShowAuth] = useState(false);
+    const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [settingPin, setSettingPin] = useState(false);
     const [pinInput, setPinInput] = useState('');
@@ -220,11 +222,12 @@ export const Profile: React.FC = () => {
         });
     };
 
-    const handleSavePin = () => {
+    const handleSavePin = async () => {
         if (pinInput.length === 4) {
-            setPinCode(pinInput);
+            await setPinCode(pinInput);
             setSettingPin(false);
             setPinInput('');
+            triggerNotification("PIN Saved", "Screen privacy lock is now active.", "achievement");
         }
     };
 
@@ -271,7 +274,7 @@ export const Profile: React.FC = () => {
             ctx.drawImage(img, x, y, drawW, drawH);
             const croppedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
             if (user) {
-                const cloudUrl = await uploadImage('avatars', user.id, croppedDataUrl);
+                const cloudUrl = await uploadImage('avatars', `${user.id}/avatar`, croppedDataUrl);
                 if (cloudUrl) updateUserPreferences({ avatar: cloudUrl });
                 else updateUserPreferences({ avatar: croppedDataUrl });
             } else {
@@ -506,9 +509,12 @@ export const Profile: React.FC = () => {
                 </div>
 
                 <div className="space-y-3 border-t border-slate-100 dark:border-slate-800/50 pt-5">
-                    <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 ml-1">
-                        <Globe size={13} className="shrink-0" />
-                        <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">{t('language')}</span>
+                    <div className="flex flex-col ml-1">
+                        <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                            <Globe size={13} className="shrink-0" />
+                            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">{t('ai_language_label')}</span>
+                        </div>
+                        <span className="text-[11px] text-slate-400 mt-0.5">{t('ai_language_desc')}</span>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                         {LANGUAGES.map(lang => (
@@ -580,14 +586,30 @@ export const Profile: React.FC = () => {
                 )}
 
                 {renderToggle(
+                    !!aiConsentGranted,
+                    () => {
+                        const next = !aiConsentGranted;
+                        updateUserPreferences({ aiConsentGranted: next });
+                        triggerNotification(
+                            next ? "AI Consent Active" : "AI Reflection Paused",
+                            next ? "Gemini will provide supportive takeaways on journal notes." : "Journal entries remain strictly local/unprocessed.",
+                            "achievement"
+                        );
+                    },
+                    "Journal Reflection Consent",
+                    <Sparkles size={16} />,
+                    aiConsentGranted ? "Permitted: Gemini synthesizes entry takeaways" : "Opted out: Entries are never sent to AI"
+                )}
+
+                {renderToggle(
                     !!securitySettings?.pinCode,
                     () => {
                         if (securitySettings?.pinCode) setPinCode(null);
                         else setSettingPin(true);
                     },
-                    "Device PIN Screen",
+                    "Screen Privacy Lock",
                     <Lock size={16} />,
-                    securitySettings?.pinCode ? 'Enabled' : 'Disabled'
+                    securitySettings?.pinCode ? 'Enabled (Hashed SHA-256 PIN)' : 'Disabled'
                 )}
 
                 {settingPin && (
@@ -618,6 +640,23 @@ export const Profile: React.FC = () => {
                         </div>
                     </div>
                 )}
+
+                <button 
+                    type="button"
+                    onClick={() => setShowPrivacyPolicy(true)} 
+                    className="w-full flex items-center justify-between p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 transition-all hover:bg-slate-50 dark:hover:bg-slate-800/60 shadow-sm"
+                >
+                    <div className="flex items-center gap-3.5">
+                        <div className="w-9 h-9 rounded-xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-emerald-500 shrink-0">
+                            <Shield size={16} />
+                        </div>
+                        <div className="flex flex-col text-left">
+                            <span className="text-sm font-semibold text-slate-900 dark:text-slate-100 leading-snug">{t('privacy_policy')}</span>
+                            <span className="text-xs text-slate-400">GDPR, Local-first data & AI controls</span>
+                        </div>
+                    </div>
+                    <ChevronRight size={16} className="text-slate-400" />
+                </button>
             </div>
 
             {/* DATA PORTABILITY & EXPORT */}
@@ -734,6 +773,7 @@ export const Profile: React.FC = () => {
             </div>
 
             {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
+            {showPrivacyPolicy && <PrivacyPolicy onClose={() => setShowPrivacyPolicy(false)} />}
             
             {showCropModal && selectedImgSrc && (
                 <div className="fixed inset-0 z-[200] bg-slate-900/40 backdrop-blur-xl flex items-center justify-center p-6 animate-in fade-in duration-300">

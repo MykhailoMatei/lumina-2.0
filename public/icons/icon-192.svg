@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="192" height="192">
+  <defs>
+    <linearGradient id="luminaBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f46e5"/>
+      <stop offset="50%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <linearGradient id="sunGlow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.7"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="128" fill="url(#luminaBg)"/>
+  <circle cx="256" cy="256" r="160" fill="#ffffff" fill-opacity="0.08"/>
+  <circle cx="256" cy="180" r="38" fill="url(#sunGlow)"/>
+  <path d="M256 100 L268 140 A20 20 0 0 0 286 154 L326 156 L294 180 A20 20 0 0 0 286 202 L300 242 L266 220 A20 20 0 0 0 246 220 L212 242 L226 202 A20 20 0 0 0 218 180 L186 156 L226 154 A20 20 0 0 0 244 140 Z" fill="#ffffff" fill-opacity="0.35"/>
+  <path d="M140 330 C180 270 240 280 256 320 C272 280 332 270 372 330 C340 370 272 380 256 345 C240 380 172 370 140 330 Z" fill="url(#sunGlow)"/>
+  <path d="M170 345 C200 305 244 315 256 340 C268 315 312 305 342 345 C310 375 268 375 256 355 C244 375 202 375 170 345 Z" fill="#ffffff" fill-opacity="0.9"/>
+</svg>

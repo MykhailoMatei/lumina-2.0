@@ -56,8 +56,9 @@ export const WeeklyReviewCard: React.FC<WeeklyReviewCardProps> = ({
 
       past7Days.forEach(day => {
         const dayOfWeek = day.date.getDay();
+        const lastDayOfMonth = new Date(day.date.getFullYear(), day.date.getMonth() + 1, 0).getDate();
         const isScheduled = h.scheduleType === 'monthly'
-          ? (h.monthlyDays || []).includes(day.dayNum)
+          ? ((h.monthlyDays || []).includes(day.dayNum) || (day.dayNum === lastDayOfMonth && (h.monthlyDays || []).some(md => md >= day.dayNum)))
           : (h.daysOfWeek || [0, 1, 2, 3, 4, 5, 6]).includes(dayOfWeek);
 
         if (isScheduled) {

@@ -1,6 +1,12 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import './src/index.css';
 import App from './App';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { initGlobalErrorListeners } from './services/errorMonitoring';
+
+// Initialize lightweight global client-side error tracking
+initGlobalErrorListeners();
 
 /**
  * Robust Service Worker Registration
@@ -10,9 +16,7 @@ const registerServiceWorker = async () => {
   if (!('serviceWorker' in navigator)) return;
 
   try {
-    // Using relative path for maximum compatibility on mobile containers
     const swPath = './sw.js';
-    
     const registration = await navigator.serviceWorker.register(swPath, {
       scope: './'
     });
@@ -23,9 +27,7 @@ const registerServiceWorker = async () => {
       registration.waiting.postMessage({ type: 'SKIP_WAITING' });
     }
 
-    // Force an update check to ensure we have the latest core
     registration.update();
-
   } catch (err: any) {
     console.warn('Lumina Core initialization skipped:', err.message);
   }
@@ -34,7 +36,6 @@ const registerServiceWorker = async () => {
 // Start registration immediately
 registerServiceWorker();
 
-// If the SW takes over after the app has loaded, notify the log
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     console.log('Lumina Core has claimed control of the session.');
@@ -49,6 +50,8 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>
 );

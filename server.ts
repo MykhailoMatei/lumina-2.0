@@ -1,4 +1,5 @@
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
+import cors from 'cors';
 import http from 'http';
 import path from 'path';
 import fs from 'fs';
@@ -12,6 +13,67 @@ const __dirname = path.dirname(__filename);
 const isProduction = process.env.NODE_ENV === 'production';
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 const MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+
+import { createClient } from '@supabase/supabase-js';
+
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || 'https://woxthjwqqlpmnlqtpced.supabase.co';
+const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || 'sb_publishable_NFIu48_HmmoIBixfMjBdbw_vYWN1bRo';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+
+const supabaseServer = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: false },
+});
+
+const supabaseAdmin = SUPABASE_SERVICE_ROLE_KEY
+  ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    })
+  : null;
+
+// Per-user and anonymous rate limiter for AI routes
+const userRequestCounts = new Map<string, { count: number; resetTime: number }>();
+
+const geminiAuthAndRateLimiter = async (req: Request, res: Response, next: NextFunction) => {
+  const authHeader = req.headers.authorization;
+  let userId: string | null = null;
+
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.slice(7).trim();
+    if (token) {
+      try {
+        const { data, error } = await supabaseServer.auth.getUser(token);
+        if (!error && data?.user?.id) {
+          userId = data.user.id;
+          (req as any).user = data.user;
+        }
+      } catch (err) {
+        console.warn('[Gemini Auth] Non-fatal token verification warning:', err);
+      }
+    }
+  }
+
+  // Rate limit key: User ID if authenticated, else IP address
+  const clientKey = userId ? `user:${userId}` : `ip:${req.ip || req.socket.remoteAddress || 'unknown'}`;
+  const now = Date.now();
+  const windowMs = 60 * 1000;
+  // Authenticated users get 60 req/min; anonymous gets 15 req/min
+  const limit = userId ? 60 : 15;
+
+  const current = userRequestCounts.get(clientKey);
+  if (!current || now > current.resetTime) {
+    userRequestCounts.set(clientKey, { count: 1, resetTime: now + windowMs });
+    return next();
+  }
+
+  if (current.count >= limit) {
+    return res.status(429).json({
+      error: 'Rate limit exceeded. Please wait a moment before sending more AI requests.',
+    });
+  }
+
+  current.count++;
+  next();
+};
 
 // Initialize Google GenAI with User-Agent header as required
 const getGenAIClient = () => {
@@ -57,9 +119,73 @@ async function startServer() {
   const app = express();
   const server = http.createServer(app);
 
+  // Enable CORS
+  app.use(cors({
+    origin: true,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'apikey', 'x-client-info']
+  }));
+
   // Large payload limit for base64 image uploads in journal insights
   app.use(express.json({ limit: '30mb' }));
   app.use(express.urlencoded({ extended: true, limit: '30mb' }));
+
+  // Apply auth and rate limiter to all Gemini AI proxy routes
+  app.use('/api/gemini', geminiAuthAndRateLimiter);
+
+  // --- Account Deletion Endpoint (Full Supabase Auth & Storage Wipe) ---
+  app.delete('/api/account/delete', async (req: Request, res: Response) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Authentication required to delete account.' });
+    }
+
+    const token = authHeader.slice(7).trim();
+    try {
+      const { data: { user }, error: authErr } = await supabaseServer.auth.getUser(token);
+      if (authErr || !user) {
+        return res.status(401).json({ error: 'Invalid or expired session token.' });
+      }
+
+      const userId = user.id;
+
+      // 1. Purge database records
+      await Promise.allSettled([
+        supabaseServer.from('goals').delete().eq('user_id', userId),
+        supabaseServer.from('habits').delete().eq('user_id', userId),
+        supabaseServer.from('journal_entries').delete().eq('user_id', userId),
+        supabaseServer.from('user_push_subscriptions').delete().eq('user_id', userId),
+      ]);
+
+      // 2. Purge user files from storage
+      try {
+        const { data: avatars } = await supabaseServer.storage.from('avatars').list(userId);
+        if (avatars && avatars.length > 0) {
+          await supabaseServer.storage.from('avatars').remove(avatars.map((f: any) => `${userId}/${f.name}`));
+        }
+        const { data: journalFiles } = await supabaseServer.storage.from('journal').list(userId);
+        if (journalFiles && journalFiles.length > 0) {
+          await supabaseServer.storage.from('journal').remove(journalFiles.map((f: any) => `${userId}/${f.name}`));
+        }
+      } catch (storageErr) {
+        console.warn('[Account Delete] Storage cleanup warning:', storageErr);
+      }
+
+      // 3. Complete deletion from auth.users using admin service role key if configured
+      if (supabaseAdmin) {
+        const { error: delErr } = await supabaseAdmin.auth.admin.deleteUser(userId);
+        if (delErr) {
+          console.error('[Account Delete] Auth admin delete error:', delErr);
+        }
+      }
+
+      return res.json({ success: true, message: 'Account and associated records deleted permanently.' });
+    } catch (err: any) {
+      console.error('[Account Delete] Unexpected error:', err);
+      return res.status(500).json({ error: err.message || 'Failed to delete account' });
+    }
+  });
 
   // --- Gemini Server-Side API Endpoints ---
 
@@ -310,11 +436,36 @@ Respond in valid JSON with:
       },
     ];
 
-    if (imageData && typeof imageData === 'string' && imageData.includes(',')) {
+    if (imageData && typeof imageData === 'string') {
       try {
-        const mimeType = imageData.split(';')[0].split(':')[1];
-        const base64Data = imageData.split(',')[1];
-        if (mimeType && base64Data) {
+        let mimeType = 'image/jpeg';
+        let base64Data: string | null = null;
+
+        if (imageData.startsWith('data:')) {
+          const commaIdx = imageData.indexOf(',');
+          if (commaIdx !== -1) {
+            const header = imageData.slice(0, commaIdx);
+            base64Data = imageData.slice(commaIdx + 1);
+            const match = header.match(/:(.*?);/);
+            if (match && match[1]) mimeType = match[1];
+          }
+        } else if (imageData.startsWith('http://') || imageData.startsWith('https://')) {
+          try {
+            const fetchRes = await fetch(imageData);
+            if (fetchRes.ok) {
+              const arrayBuf = await fetchRes.arrayBuffer();
+              base64Data = Buffer.from(arrayBuf).toString('base64');
+              const cType = fetchRes.headers.get('content-type');
+              if (cType) mimeType = cType;
+            }
+          } catch (fetchErr) {
+            console.warn('Failed to fetch remote image for entry insight:', fetchErr);
+          }
+        } else if (imageData.length > 100 && !imageData.startsWith('http')) {
+          base64Data = imageData;
+        }
+
+        if (base64Data) {
           parts.push({
             inlineData: {
               data: base64Data,

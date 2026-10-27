@@ -18,7 +18,18 @@ const vapidEmail = Deno.env.get('VAPID_EMAIL') || 'mailto:support@lumina.app';
 
 webpush.setVapidDetails(vapidEmail, vapidPublicKey, vapidPrivateKey);
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS'
+};
+
 Deno.serve(async (req: Request) => {
+  // Handle CORS Preflight
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
   try {
     const authHeader = req.headers.get('Authorization') || '';
     const token = authHeader.replace(/^Bearer\s+/i, '');
@@ -40,7 +51,7 @@ Deno.serve(async (req: Request) => {
       if (authError || !user || user.id !== user_id) {
         return new Response(JSON.stringify({ error: 'Forbidden: You can only notify yourself' }), { 
           status: 403, 
-          headers: { 'Content-Type': 'application/json' } 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         });
       }
       targetUserId = user.id;
@@ -49,7 +60,7 @@ Deno.serve(async (req: Request) => {
       if (authError || !user) {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), { 
           status: 401, 
-          headers: { 'Content-Type': 'application/json' } 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         });
       }
       targetUserId = user.id;
@@ -65,7 +76,7 @@ Deno.serve(async (req: Request) => {
     if (subError || !subData) {
       return new Response(JSON.stringify({ error: 'No subscription found' }), { 
         status: 404, 
-        headers: { 'Content-Type': 'application/json' } 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       });
     }
 
@@ -87,13 +98,13 @@ Deno.serve(async (req: Request) => {
     }
 
     return new Response(JSON.stringify({ success: true }), {
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (err: any) {
     return new Response(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }), { 
       status: 500,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
 });

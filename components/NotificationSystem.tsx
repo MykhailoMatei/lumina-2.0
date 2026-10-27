@@ -1,5 +1,5 @@
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { X, Clock, Bell, Trophy, Zap } from 'lucide-react';
 import { AppNotification } from '../types';
@@ -19,13 +19,16 @@ const ToastItem: React.FC<ToastItemProps> = ({
     themeClasses, 
     t 
 }) => {
+    const onDismissRef = useRef(onDismiss);
+    onDismissRef.current = onDismiss;
+
     useEffect(() => {
         if (n.type === 'reminder') return;
         const timer = setTimeout(() => {
-            onDismiss(n.id);
+            onDismissRef.current(n.id);
         }, 4500);
         return () => clearTimeout(timer);
-    }, [n.id, n.type, onDismiss]);
+    }, [n.id, n.type]);
 
     return (
         <div 

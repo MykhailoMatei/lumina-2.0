@@ -92,7 +92,7 @@ const BASE_TRANSLATIONS = {
   sign_out: 'Sign Out',
   pin_prompt: 'Enter your PIN to continue',
   delete_key: 'Delete',
-  encrypted_secure: 'Device PIN Protection',
+  encrypted_secure: 'Screen Privacy Lock',
   snooze_btn: 'Snooze',
   done_btn: 'Done',
   privacy_policy: 'Privacy Policy',
@@ -102,15 +102,33 @@ const BASE_TRANSLATIONS = {
   zoom_label: 'Zoom',
   back: 'Back',
   save: 'Save',
-  delete_account_confirm: 'Are you sure? This will permanently erase your local data and cloud records.'
+  delete_account_confirm: 'Are you sure? This will permanently erase your local data and cloud records.',
+  anonymous: 'Anonymous',
+  policy_sec_1_title: 'Data Ownership & Local-First Storage',
+  policy_sec_1_text: 'Your personal reflections, habits, and goals are your private property. By default, your data is stored locally in your browser storage. If you choose to link a cloud account, your data is synced securely with Supabase database storage.',
+  policy_sec_2_title: 'AI Processing & Privacy Safeguards',
+  policy_sec_2_text: 'AI reflections and daily briefings are powered by Google Gemini. Your journal entries are only sent to the AI service when you explicitly opt in to AI Insights. We never use your personal reflections or journal logs to train public machine learning models.',
+  policy_sec_3_title: 'Screen Privacy PIN Lock',
+  policy_sec_3_text: 'When enabled, your 4-digit PIN is securely hashed using SHA-256 with a salt before verification. It acts as an in-app privacy screen to prevent curious eyes on shared devices without transmitting your PIN to any server.',
+  policy_sec_4_title: 'Export & Permanent Account Deletion',
+  policy_sec_4_text: 'You maintain full data portability. You can export all your journal logs as Markdown files or download a full JSON backup anytime. Clicking "Delete Data" permanently removes your local storage and purges remote cloud records and authentication entries.',
+  ai_note_title: 'Your Consent Matters:',
+  ai_note_text: 'You have complete control over AI features. You can disable AI insights at any moment in Settings without losing any of your habits, goals, or journal entries.',
+  ai_language_label: 'AI Reflection & Output Language',
+  ai_language_desc: 'Controls the language used for AI daily briefings, habit coaching, and reflections.',
+  ai_consent_prompt_title: 'AI Reflections & Insights',
+  ai_consent_prompt_text: 'Allow Lumina to generate supportive reflections on your journal entries using Google Gemini. Your notes stay private.',
+  ai_consent_enable: 'Enable AI Reflections',
+  ai_consent_decline: 'Keep Notes Private',
+  ai_consent_active: 'AI Insights Active'
 };
 
 export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
   English: BASE_TRANSLATIONS,
-  French: { ...BASE_TRANSLATIONS, home: 'Accueil', goals: 'Objectifs' },
-  German: { ...BASE_TRANSLATIONS, home: 'Startseite' },
-  Ukrainian: { ...BASE_TRANSLATIONS, home: 'Головна' },
-  Spanish: { ...BASE_TRANSLATIONS, home: 'Inicio' }
+  French: { ...BASE_TRANSLATIONS, home: 'Accueil', goals: 'Objectifs', journal: 'Journal', insights: 'Aperçus', settings: 'Paramètres' },
+  German: { ...BASE_TRANSLATIONS, home: 'Startseite', goals: 'Ziele', journal: 'Tagebuch', insights: 'Einblicke', settings: 'Einstellungen' },
+  Ukrainian: { ...BASE_TRANSLATIONS, home: 'Головна', goals: 'Цілі', journal: 'Щоденник', insights: 'Аналітика', settings: 'Налаштування' },
+  Spanish: { ...BASE_TRANSLATIONS, home: 'Inicio', goals: 'Metas', journal: 'Diario', insights: 'Perspectivas', settings: 'Ajustes' }
 };
 
 interface AppContextType extends UserState {
@@ -139,8 +157,8 @@ interface AppContextType extends UserState {
   deleteJournalEntry: (id: string) => void;
   saveWeeklyReview: (review: WeeklyReview, postToJournal?: boolean) => void;
   updateUserPreferences: (prefs: Partial<UserState>) => void;
-  unlockApp: (pin: string) => boolean;
-  setPinCode: (pin: string | null) => void;
+  unlockApp: (pin: string) => Promise<boolean> | boolean;
+  setPinCode: (pin: string | null) => Promise<void> | void;
   deleteAccount: () => void;
   exportData: () => void;
   exportJournalMarkdown: () => void;
@@ -176,7 +194,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       theme: 'light',
       themeColor: 'indigo',
       language: 'English',
-      securitySettings: { pinCode: null },
+      aiConsentGranted: false,
+      securitySettings: { pinCode: null, pinHashed: false },
       dashboardLayout: { showGrow: true, showCommunity: false, showDailyWisdom: true },
       notificationSettings: { 
         enabled: true, 
@@ -221,6 +240,44 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   stateRef.current = state;
   const lastCheckedMinute = useRef<string | null>(null);
   const themeClasses = useMemo(() => THEMES[state.themeColor], [state.themeColor]);
+
+  // Robust reconciliation that merges remote changes without overwriting concurrent local edits
+  const applySyncResult = useCallback((syncData: Partial<UserState>) => {
+    isSyncApplyingRef.current = true;
+    setState(current => {
+      const reconcile = <T extends { id: string; lastUpdated?: number }>(currentList: T[], remoteMergedList: T[] = []): T[] => {
+        const map = new Map<string, T>(currentList.map(item => [item.id, item]));
+        remoteMergedList.forEach(r => {
+          const local = map.get(r.id);
+          // If local was edited after or concurrent with remote sync fetch, keep local
+          if (!local || (Number(r.lastUpdated) || 0) >= (Number(local.lastUpdated) || 0)) {
+            map.set(r.id, r);
+          }
+        });
+        return Array.from(map.values());
+      };
+
+      const reconciledGoals = syncData.goals ? reconcile(current.goals, syncData.goals) : current.goals;
+      const reconciledHabits = syncData.habits ? reconcile(current.habits, syncData.habits) : current.habits;
+      const reconciledEntries = syncData.journalEntries ? reconcile(current.journalEntries, syncData.journalEntries) : current.journalEntries;
+
+      // Retain the union of deletedIds so neither device's tombstones are lost
+      const mergedDeleted = {
+        goals: Array.from(new Set([...(current.deletedIds?.goals || []), ...(syncData.deletedIds?.goals || [])])),
+        habits: Array.from(new Set([...(current.deletedIds?.habits || []), ...(syncData.deletedIds?.habits || [])])),
+        journalEntries: Array.from(new Set([...(current.deletedIds?.journalEntries || []), ...(syncData.deletedIds?.journalEntries || [])]))
+      };
+
+      return {
+        ...current,
+        goals: reconciledGoals,
+        habits: reconciledHabits,
+        journalEntries: reconciledEntries,
+        deletedIds: mergedDeleted,
+        syncStatus: syncData.syncStatus || { lastSync: Date.now(), status: 'synced' }
+      };
+    });
+  }, []);
 
   const circadian = useMemo(() => {
     const hour = new Date().getHours();
@@ -296,10 +353,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const { notifications, ...stateToSave } = state;
       localStorage.setItem('lumina_state', JSON.stringify({ ...stateToSave, notifications: [] }));
     } catch (e) {
-      console.warn('LocalStorage quota limit reached, trimming oversized image cache:', e);
+      console.warn('LocalStorage quota limit reached, trimming oversized image cache safely:', e);
       try {
-        const trimmedEntries = state.journalEntries.map(entry => {
-          if (entry.imageData && entry.imageData.length > 50000) {
+        // Protect the 5 most recent journal entries with photos so fresh offline photos aren't dropped
+        const trimmedEntries = state.journalEntries.map((entry, idx) => {
+          if (idx >= 5 && entry.imageData && entry.imageData.length > 50000) {
             return { ...entry, imageData: undefined };
           }
           return entry;
@@ -326,8 +384,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (u) {
             performCloudSync(stateRef.current).then(res => {
                 if (res.success && res.data) {
-                    isSyncApplyingRef.current = true;
-                    setState(s => ({ ...s, ...res.data }));
+                    applySyncResult(res.data);
                 }
             });
         }
@@ -340,16 +397,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setState(s => ({ ...s, syncStatus: { ...s.syncStatus, status: 'pending' } }));
         const res = await performCloudSync(stateRef.current);
         if (res.success && res.data) {
-          isSyncApplyingRef.current = true;
-          setState(s => ({
-            ...s, 
-            ...res.data
-          }));
+          applySyncResult(res.data);
         }
       }
     });
     return () => subscription.unsubscribe();
-  }, []);
+  }, [applySyncResult]);
 
   // Central debounced cloud sync
   useEffect(() => {
@@ -367,11 +420,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setState(s => ({ ...s, syncStatus: { ...s.syncStatus, status: 'pending' } }));
       const res = await performCloudSync(stateRef.current);
       if (res.success && res.data) {
-        isSyncApplyingRef.current = true;
-        setState(s => ({
-          ...s, 
-          ...res.data
-        }));
+        applySyncResult(res.data);
       } else {
         setState(s => ({ ...s, syncStatus: { ...s.syncStatus, status: 'error' } }));
       }
@@ -380,7 +429,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return () => {
       if (syncTimeoutRef.current) window.clearTimeout(syncTimeoutRef.current);
     };
-  }, [state.goals, state.habits, state.journalEntries, state.deletedIds, user]);
+  }, [state.goals, state.habits, state.journalEntries, state.deletedIds, user, applySyncResult]);
 
   const t = useCallback((key: string) => {
     return TRANSLATIONS[state.language][key] || key;
@@ -617,22 +666,65 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const updateUserPreferences = (prefs: Partial<UserState>) => setState(s => ({ ...s, ...prefs }));
 
-  const unlockApp = (pin: string) => {
-    if (pin === state.securitySettings.pinCode) {
+  const hashPin = async (pin: string): Promise<string> => {
+    try {
+      const enc = new TextEncoder();
+      const data = enc.encode(`lumina_privacy_salt_v1:${pin}`);
+      const digest = await crypto.subtle.digest('SHA-256', data);
+      return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch {
+      return pin;
+    }
+  };
+
+  const unlockApp = async (pin: string): Promise<boolean> => {
+    const currentPin = state.securitySettings.pinCode;
+    if (!currentPin) {
+      setIsLocked(false);
+      return true;
+    }
+    // Check plain text for backwards compatibility or SHA-256 hash
+    if (pin === currentPin) {
+      setIsLocked(false);
+      return true;
+    }
+    const hashed = await hashPin(pin);
+    if (hashed === currentPin) {
       setIsLocked(false);
       return true;
     }
     return false;
   };
 
-  const setPinCode = (pin: string | null) => {
-    setState(s => ({ ...s, securitySettings: { ...s.securitySettings, pinCode: pin } }));
-    if (!pin) setIsLocked(false);
+  const setPinCode = async (pin: string | null) => {
+    if (!pin) {
+      setState(s => ({ ...s, securitySettings: { ...s.securitySettings, pinCode: null, pinHashed: false } }));
+      setIsLocked(false);
+      return;
+    }
+    const hashed = await hashPin(pin);
+    setState(s => ({ ...s, securitySettings: { ...s.securitySettings, pinCode: hashed, pinHashed: true } }));
   };
 
   const deleteAccount = async () => {
     try {
       if (isSupabaseConfigured && user) {
+        // 1. Call server endpoint to permanently delete Supabase Auth user & remote data
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const token = sessionData?.session?.access_token;
+          if (token) {
+            const apiBase = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '');
+            await fetch(`${apiBase}/api/account/delete`, {
+              method: 'DELETE',
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+          }
+        } catch (serverPurgeErr) {
+          console.warn('[Account Delete] Server deletion non-fatal warning:', serverPurgeErr);
+        }
+
+        // 2. Direct client fallback cleanup for tables
         await Promise.allSettled([
           supabase.from('goals').delete().eq('user_id', user.id),
           supabase.from('habits').delete().eq('user_id', user.id),
@@ -733,15 +825,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const syncWithCloud = async () => {
-    const res = await performCloudSync(state);
+    setState(s => ({ ...s, syncStatus: { ...s.syncStatus, status: 'pending' } }));
+    const res = await performCloudSync(stateRef.current);
     if (res.success && res.data) {
-      setState(s => ({ 
-        ...s, 
-        ...res.data,
-        deletedIds: { goals: [], habits: [], journalEntries: [] }
-      }));
+      applySyncResult(res.data);
       triggerNotification(t('cloud_core'), t('sync_success'), 'achievement');
     } else {
+      setState(s => ({ ...s, syncStatus: { ...s.syncStatus, status: 'error' } }));
       triggerNotification(t('cloud_core'), res.message || t('sync_failed'), 'reminder');
     }
   };
@@ -751,22 +841,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     await supabase.auth.signOut();
   };
 
-  const triggerNotification = (title: string, message: string, type: 'achievement' | 'motivation' | 'reminder') => {
+  const triggerNotification = useCallback((title: string, message: string, type: 'achievement' | 'motivation' | 'reminder') => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     setState(s => ({ ...s, notifications: [{ id, title, message, type }, ...(s.notifications || [])] }));
-  };
+  }, []);
 
-  const dismissNotification = (id: string) => setState(s => ({ ...s, notifications: s.notifications.filter(n => n.id !== id) }));
+  const dismissNotification = useCallback((id: string) => {
+    setState(s => ({ ...s, notifications: s.notifications.filter(n => n.id !== id) }));
+  }, []);
   
-  const snoozeNotification = (id: string) => {
-    const notif = state.notifications.find(n => n.id === id);
-    dismissNotification(id);
-    if (notif) {
-      setTimeout(() => {
-        triggerNotification(notif.title, notif.message, 'reminder');
-      }, 300000);
-    }
-  };
+  const snoozeNotification = useCallback((id: string) => {
+    setState(s => {
+      const notif = s.notifications.find(n => n.id === id);
+      if (notif) {
+        setTimeout(() => {
+          triggerNotification(notif.title, notif.message, 'reminder');
+        }, 300000);
+      }
+      return { ...s, notifications: s.notifications.filter(n => n.id !== id) };
+    });
+  }, [triggerNotification]);
 
   const toggleResourceFavorite = (id: string) => {
     setState(s => {
