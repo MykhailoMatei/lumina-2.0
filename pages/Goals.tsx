@@ -23,6 +23,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
     const [expandedGoalId, setExpandedGoalId] = useState<string | null>(null);
     const [generating, setGenerating] = useState(false);
     const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
+    const [step, setStep] = useState(1);
 
     // Confirmation State for deletion (Mobile-safe alternative to window.confirm)
     const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
@@ -46,7 +47,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
 
     const filtered = goals.filter(g => {
         if (activeTab === 'active') return !g.completed && !g.isPaused;
-        if (activeTab === 'needs') return g.isPaused;
+        if (activeTab === 'needs') return g.isPaused && !g.completed;
         if (activeTab === 'hall') return g.completed;
         return false;
     });
@@ -137,6 +138,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
         setDeadline('');
         setMilestones([]);
         setManualMilestone('');
+        setStep(1);
     };
 
     const handleGenerate = async () => {
@@ -271,7 +273,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                 <button 
                     type="button"
                     onClick={() => setShowModal(true)} 
-                    className={`${themeClasses.primary} text-white px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-sm active:scale-95 transition-all text-xs font-semibold uppercase tracking-wider`}
+                    className={`bg-gradient-to-br ${themeClasses.gradient} text-white px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-sm active:scale-95 transition-all text-xs font-semibold uppercase tracking-wider`}
                 >
                     <Plus size={15} strokeWidth={2.5} /> New Goal
                 </button>
@@ -687,106 +689,134 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                         </div>
 
                         <form onSubmit={handleSaveGoal} className="space-y-5 flex-1 overflow-y-auto no-scrollbar pr-1 pb-2">
-                            <div className="space-y-1.5">
-                                <label className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider ml-1">Goal Title</label>
-                                <input 
-                                    required 
-                                    value={title} 
-                                    onChange={e => setTitle(e.target.value)} 
-                                    className="w-full bg-slate-50 dark:bg-slate-800/60 rounded-xl px-4 py-3.5 text-sm font-normal outline-none dark:text-white border border-slate-200 dark:border-slate-700 focus:border-indigo-500 transition-colors" 
-                                    placeholder="e.g. Run a 10k, Read 12 books, Learn Spanish..." 
-                                />
-                            </div>
-
-                            <div className="space-y-1.5">
-                                <label className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider ml-1">Why this matters</label>
-                                <textarea 
-                                    value={whyStatement} 
-                                    onChange={e => setWhyStatement(e.target.value)} 
-                                    className="w-full bg-slate-50 dark:bg-slate-800/60 rounded-xl px-4 py-3 text-sm font-normal italic outline-none dark:text-white h-20 resize-none border border-slate-200 dark:border-slate-700 focus:border-indigo-500 transition-colors" 
-                                    placeholder="What will achieving this bring to your life?" 
-                                />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-3.5">
-                                <div className="space-y-1.5">
-                                    <label className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider ml-1">Category</label>
-                                    <select 
-                                        value={category}
-                                        onChange={e => setCategory(e.target.value as GoalCategory)}
-                                        className="w-full bg-slate-50 dark:bg-slate-800/60 rounded-xl px-3.5 py-3 text-xs font-medium dark:text-white outline-none border border-slate-200 dark:border-slate-700"
-                                    >
-                                        {Object.values(GoalCategory).map(cat => (
-                                            <option key={cat} value={cat}>{cat}</option>
-                                        ))}
-                                    </select>
+                            {step === 1 && (
+                                <div className="space-y-5 animate-in slide-in-from-right-4 duration-300">
+                                    <div className="space-y-1.5">
+                                        <label className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider ml-1">Goal Title</label>
+                                        <input 
+                                            required 
+                                            value={title} 
+                                            onChange={e => setTitle(e.target.value)} 
+                                            className="w-full bg-slate-50 dark:bg-slate-800/60 rounded-xl px-4 py-3.5 text-sm font-normal outline-none dark:text-white border border-slate-200 dark:border-slate-700 focus:border-indigo-500 transition-colors" 
+                                            placeholder="e.g. Run a 10k, Read 12 books..." 
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider ml-1">Why this matters</label>
+                                        <textarea 
+                                            value={whyStatement} 
+                                            onChange={e => setWhyStatement(e.target.value)} 
+                                            className="w-full bg-slate-50 dark:bg-slate-800/60 rounded-xl px-4 py-3 text-sm font-normal italic outline-none dark:text-white h-24 resize-none border border-slate-200 dark:border-slate-700 focus:border-indigo-500 transition-colors" 
+                                            placeholder="What will achieving this bring to your life?" 
+                                        />
+                                    </div>
                                 </div>
-                                <div className="space-y-1.5">
-                                    <label className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider ml-1">Target Date</label>
-                                    <input 
-                                        type="date"
-                                        value={deadline}
-                                        onChange={e => setDeadline(e.target.value)}
-                                        className="w-full bg-slate-50 dark:bg-slate-800/60 rounded-xl px-3.5 py-2.5 text-xs font-medium dark:text-white outline-none border border-slate-200 dark:border-slate-700"
-                                    />
-                                </div>
-                            </div>
+                            )}
 
-                            <div className="space-y-3">
-                                <div className="flex justify-between items-center px-1">
-                                    <label className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider">Milestones</label>
-                                    {!securitySettings?.aiDisabled && (
-                                        <button 
-                                            type="button" 
-                                            onClick={handleGenerate} 
-                                            disabled={generating || !title} 
-                                            className={`text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5 ${themeClasses.text} hover:opacity-70 transition-all disabled:opacity-30`}
+                            {step === 2 && (
+                                <div className="space-y-5 animate-in slide-in-from-right-4 duration-300">
+                                    <div className="space-y-1.5">
+                                        <label className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider ml-1">Category</label>
+                                        <select 
+                                            value={category}
+                                            onChange={e => setCategory(e.target.value as GoalCategory)}
+                                            className="w-full bg-slate-50 dark:bg-slate-800/60 rounded-xl px-3.5 py-3 text-xs font-medium dark:text-white outline-none border border-slate-200 dark:border-slate-700"
                                         >
-                                            {generating ? <Loader2 size={12} className="animate-spin"/> : <Sparkles size={12}/>} AI Milestones
-                                        </button>
-                                    )}
+                                            {Object.values(GoalCategory).map(cat => (
+                                                <option key={cat} value={cat}>{cat}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider ml-1">Target Date</label>
+                                        <input 
+                                            type="date"
+                                            value={deadline}
+                                            onChange={e => setDeadline(e.target.value)}
+                                            className="w-full bg-slate-50 dark:bg-slate-800/60 rounded-xl px-3.5 py-2.5 text-xs font-medium dark:text-white outline-none border border-slate-200 dark:border-slate-700"
+                                        />
+                                    </div>
                                 </div>
+                            )}
 
-                                <div className="flex gap-2">
-                                    <input 
-                                        value={manualMilestone}
-                                        onChange={e => setManualMilestone(e.target.value)}
-                                        className="flex-1 bg-slate-50 dark:bg-slate-800/60 rounded-xl px-4 py-3 text-xs font-normal outline-none dark:text-white border border-slate-200 dark:border-slate-700"
-                                        placeholder="Add a step..."
-                                        onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addManualMilestone())}
-                                    />
-                                    <button 
-                                        type="button" 
-                                        onClick={addManualMilestone}
-                                        className={`w-11 h-11 rounded-xl ${themeClasses.secondary} ${themeClasses.text} flex items-center justify-center active:scale-[0.9] transition-all shrink-0 border ${themeClasses.border} shadow-sm`}
-                                    >
-                                        <ListPlus size={18} />
-                                    </button>
-                                </div>
-
-                                <div className="space-y-1.5 max-h-36 overflow-y-auto no-scrollbar">
-                                    {milestones.map((m, i) => (
-                                        <div key={i} className="group p-2.5 bg-slate-50 dark:bg-slate-800/30 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-300 border border-slate-100 dark:border-slate-800/40 flex justify-between items-center animate-in slide-in-from-left-2">
-                                            <span className="flex-1 truncate pr-4">{m}</span>
+                            {step === 3 && (
+                                <div className="space-y-3 animate-in slide-in-from-right-4 duration-300">
+                                    <div className="flex justify-between items-center px-1">
+                                        <label className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider">Milestones</label>
+                                        {!securitySettings?.aiDisabled && (
                                             <button 
                                                 type="button" 
-                                                onClick={() => setMilestones(prev => prev.filter((_, idx) => idx !== i))}
-                                                className="p-1 text-rose-300 hover:text-rose-500 transition-all"
+                                                onClick={handleGenerate} 
+                                                disabled={generating || !title} 
+                                                className={`text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5 ${themeClasses.text} hover:opacity-70 transition-all disabled:opacity-30`}
                                             >
-                                                <X size={13} />
+                                                {generating ? <Loader2 size={12} className="animate-spin"/> : <Sparkles size={12}/>} AI Milestones
                                             </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
+                                        )}
+                                    </div>
 
-                            <button 
-                                type="submit" 
-                                disabled={!title} 
-                                className={`w-full py-3.5 rounded-2xl font-semibold text-xs uppercase tracking-wider text-white transition-all active:scale-[0.98] bg-gradient-to-br ${themeClasses.gradient} disabled:opacity-50 mt-2`}
-                            >
-                                {editingGoalId ? 'Update Goal' : 'Save Goal'}
-                            </button>
+                                    <div className="flex gap-2">
+                                        <input 
+                                            value={manualMilestone}
+                                            onChange={e => setManualMilestone(e.target.value)}
+                                            className="flex-1 bg-slate-50 dark:bg-slate-800/60 rounded-xl px-4 py-3 text-xs font-normal outline-none dark:text-white border border-slate-200 dark:border-slate-700"
+                                            placeholder="Add a step..."
+                                            onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addManualMilestone())}
+                                        />
+                                        <button 
+                                            type="button" 
+                                            onClick={addManualMilestone}
+                                            className={`w-11 h-11 rounded-xl ${themeClasses.secondary} ${themeClasses.text} flex items-center justify-center active:scale-[0.9] transition-all shrink-0 border ${themeClasses.border} shadow-sm`}
+                                        >
+                                            <ListPlus size={18} />
+                                        </button>
+                                    </div>
+
+                                    <div className="space-y-1.5 max-h-36 overflow-y-auto no-scrollbar">
+                                        {milestones.map((m, i) => (
+                                            <div key={i} className="group p-2.5 bg-slate-50 dark:bg-slate-800/30 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-300 border border-slate-100 dark:border-slate-800/40 flex justify-between items-center animate-in slide-in-from-left-2">
+                                                <span className="flex-1 truncate pr-4">{m}</span>
+                                                <button 
+                                                    type="button" 
+                                                    onClick={() => setMilestones(prev => prev.filter((_, idx) => idx !== i))}
+                                                    className="p-1 text-rose-300 hover:text-rose-500 transition-all"
+                                                >
+                                                    <X size={13} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="flex gap-3 pt-2">
+                                {step > 1 && (
+                                    <button 
+                                        type="button" 
+                                        onClick={() => setStep(prev => prev - 1)}
+                                        className="flex-1 py-3.5 rounded-2xl font-semibold text-xs uppercase tracking-wider text-slate-500 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 transition-all"
+                                    >
+                                        Back
+                                    </button>
+                                )}
+                                {step < 3 ? (
+                                    <button 
+                                        type="button" 
+                                        onClick={() => setStep(prev => prev + 1)}
+                                        className={`flex-1 py-3.5 rounded-2xl font-semibold text-xs uppercase tracking-wider text-white transition-all bg-gradient-to-br ${themeClasses.gradient}`}
+                                    >
+                                        Continue
+                                    </button>
+                                ) : (
+                                    <button 
+                                        type="submit" 
+                                        disabled={!title} 
+                                        className={`flex-1 py-3.5 rounded-2xl font-semibold text-xs uppercase tracking-wider text-white transition-all bg-gradient-to-br ${themeClasses.gradient} disabled:opacity-50`}
+                                    >
+                                        {editingGoalId ? 'Update Goal' : 'Save Goal'}
+                                    </button>
+                                )}
+                            </div>
                         </form>
                     </div>
                 </div>

@@ -15,7 +15,7 @@ interface WeeklyReviewCardProps {
 }
 
 export const WeeklyReviewCard: React.FC<WeeklyReviewCardProps> = ({ 
-  defaultExpanded = true 
+  defaultExpanded = false 
 }) => {
   const { 
     habits, 

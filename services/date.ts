@@ -26,14 +26,21 @@ export const isSunday = (d: Date = new Date()): boolean => d.getDay() === 0;
 export const getPast7Days = (endDate: Date = new Date()): { dateStr: string; dayName: string; dayNum: number; date: Date }[] => {
   const days: { dateStr: string; dayName: string; dayNum: number; date: Date }[] = [];
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(endDate);
-    d.setDate(d.getDate() - i);
+  
+  // Calculate Monday of the current week (or previous if Sunday)
+  const d = new Date(endDate);
+  const dayOfWeek = d.getDay();
+  const diff = d.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); 
+  d.setDate(diff);
+
+  for (let i = 0; i < 7; i++) {
+    const current = new Date(d);
+    current.setDate(d.getDate() + i);
     days.push({
-      dateStr: toLocalDateString(d),
-      dayName: dayNames[d.getDay()],
-      dayNum: d.getDate(),
-      date: d
+      dateStr: toLocalDateString(current),
+      dayName: dayNames[current.getDay()],
+      dayNum: current.getDate(),
+      date: current
     });
   }
   return days;

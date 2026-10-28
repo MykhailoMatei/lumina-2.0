@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { generateDailyBriefing, suggestAtomicHabit } from '../services/geminiService';
 import { Habit, GoalCategory, HabitReward } from '../types';
-import { toLocalDateString, parseLocalDate } from '../services/date';
+import { toLocalDateString, parseLocalDate, isSunday, getWeekRangeString } from '../services/date';
 import { calculateHabitStreak } from '../services/habitService';
 import { WeeklyReviewCard } from '../components/WeeklyReviewCard';
 import { BankedRewardsCard } from '../components/BankedRewardsCard';
@@ -58,7 +58,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
     const { 
         name, avatar, goals, habits, journalEntries, toggleHabitCompletion, addHabit, updateHabit, deleteHabit,
         themeClasses, language, t, dailyBriefing, lastBriefingUpdate, 
-        updateUserPreferences, circadian, syncStatus, user, dashboardLayout, triggerNotification, securitySettings
+        updateUserPreferences, circadian, syncStatus, user, dashboardLayout, triggerNotification, securitySettings, lastWeeklyReview
     } = useApp();
     
     const [currentTodayStr, setCurrentTodayStr] = useState(getTodayString());
@@ -512,7 +512,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                 )}
 
                 {/* SUNDAY WEEKLY REVIEW */}
-                <WeeklyReviewCard />
+                {(() => {
+                    const weekRange = getWeekRangeString(new Date());
+                    const isReviewCompleted = lastWeeklyReview?.weekEndDate === weekRange.endStr;
+                    return isSunday(new Date()) && !isReviewCompleted && <WeeklyReviewCard />;
+                })()}
 
                 {/* RITUAL NAVIGATOR */}
                 <div className="space-y-4">

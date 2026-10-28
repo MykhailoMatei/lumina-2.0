@@ -179,6 +179,7 @@ export const Journal: React.FC = () => {
     const [search, setSearch] = useState('');
     const [expandedEntryIds, setExpandedEntryIds] = useState<Record<string, boolean>>({});
     const [quickNoteText, setQuickNoteText] = useState('');
+    const [limit, setLimit] = useState(3);
     
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -510,7 +511,7 @@ export const Journal: React.FC = () => {
                     onClick={() => setSelectedCategoryFilter('All')}
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${
                         selectedCategoryFilter === 'All'
-                            ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-slate-900 dark:border-white shadow-sm'
+                            ? themeClasses.primary + ' text-white border-transparent shadow-sm'
                             : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
                     }`}
                 >
@@ -536,7 +537,7 @@ export const Journal: React.FC = () => {
                                 onClick={() => setSelectedCategoryFilter(folder.id)}
                                 className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${
                                     isActive
-                                        ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-slate-900 dark:border-white shadow-sm'
+                                        ? themeClasses.primary + ' text-white border-transparent shadow-sm'
                                         : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
                                 }`}
                             >
@@ -680,7 +681,7 @@ export const Journal: React.FC = () => {
                         </button>
                     </div>
                 ) : (
-                    filteredEntries.map((entry) => {
+                    filteredEntries.slice(0, limit).map((entry) => {
                         const linkedGoal = goals.find(g => g.id === entry.linkedGoalId);
                         const linkedHabit = habits.find(h => h.id === entry.linkedHabitId);
                         const moodCfg = MOODS.find(m => m.key === entry.mood) || MOODS[1];
@@ -712,7 +713,7 @@ export const Journal: React.FC = () => {
                                             </div>
 
                                             {/* Minimalist Folder Box */}
-                                            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-100/90 dark:bg-slate-800/90 text-slate-600 dark:text-slate-300 border border-slate-200/90 dark:border-slate-700/60">
+                                            <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md ${themeClasses.secondary} ${themeClasses.text} border ${themeClasses.border}`}>
                                                 <Folder size={10} className="text-slate-400" />
                                                 <span className="text-[10px] font-semibold tracking-wide">
                                                     {entryFolder}
@@ -840,6 +841,16 @@ export const Journal: React.FC = () => {
                             </div>
                         );
                     })
+                )}
+                {limit < filteredEntries.length && (
+                    <div className="px-4 py-4">
+                        <button
+                            onClick={() => setLimit(prev => prev + 3)}
+                            className="w-full py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                        >
+                            Load More
+                        </button>
+                    </div>
                 )}
             </div>
 

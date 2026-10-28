@@ -290,9 +290,10 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
                 </div>
           </div>
 
+          <WeeklyReviewCard defaultExpanded={false} />
+
           {timeframe === 'Week' && (
             <div className="animate-in fade-in duration-300">
-              <WeeklyReviewCard defaultExpanded={true} />
             </div>
           )}
 
