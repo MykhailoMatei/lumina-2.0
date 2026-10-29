@@ -84,6 +84,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
     const [habitWizardStep, setHabitWizardStep] = useState<number>(1);
     const [showTriggerTooltip, setShowTriggerTooltip] = useState<boolean>(false);
     const [quickHabitTitle, setQuickHabitTitle] = useState<string>('');
+    const [showScheduledHabits, setShowScheduledHabits] = useState<boolean>(false);
 
     // Temptation Bundling (Premack Principle) Reward State
     const [hasReward, setHasReward] = useState<boolean>(false);
@@ -651,6 +652,35 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                                     </div>
                                 );
                             })
+                        )}
+                    </div>
+                    
+                    <div className="pt-4">
+                        <button 
+                            onClick={() => setShowScheduledHabits(!showScheduledHabits)}
+                            className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors w-full justify-center py-2"
+                        >
+                            {showScheduledHabits ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                            {showScheduledHabits ? 'Hide Scheduled Habits' : 'View Scheduled Habits'}
+                        </button>
+                        {showScheduledHabits && (
+                            <div className="space-y-3 pt-4 animate-in fade-in slide-in-from-top-2">
+                                {habits.filter(h => !habitsForDay.includes(h)).length === 0 ? (
+                                    <p className="text-xs text-center text-slate-400 italic">No other scheduled habits.</p>
+                                ) : (
+                                    habits.filter(h => !habitsForDay.includes(h)).map(h => (
+                                        <div key={h.id} className="bg-white dark:bg-slate-800/50 p-3 rounded-[1.5rem] border border-slate-100 dark:border-slate-800 flex justify-between items-center">
+                                            <div className="min-w-0">
+                                                <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-200 truncate">{h.title}</h4>
+                                                <p className="text-[10px] text-slate-400 uppercase tracking-wider">
+                                                    {h.scheduleType === 'monthly' ? `Monthly: Day ${h.monthlyDays?.join(', ')}` : `Weekly: ${h.daysOfWeek?.map(d => ['S', 'M', 'T', 'W', 'T', 'F', 'S'][d]).join(', ')}`}
+                                                </p>
+                                            </div>
+                                            <button onClick={() => handleEditHabit(h)} className="p-2 text-slate-400 hover:text-indigo-500"><Pencil size={14} /></button>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
                         )}
                     </div>
                 </div>
