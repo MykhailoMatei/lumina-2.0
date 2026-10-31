@@ -11,7 +11,7 @@ import {
 import { uploadImage } from '../services/storageService';
 import { AuthModal } from '../components/AuthModal';
 import { PrivacyPolicy } from '../components/PrivacyPolicy';
-import { requestNotificationPermission, sendSystemNotification, subscribeToPush, triggerBackendTestNudge } from '../services/notificationService';
+import { requestNotificationPermission, sendSystemNotification, subscribeToPush, triggerBackendTestNudge, syncPushSubscriptionSchedule } from '../services/notificationService';
 
 const LANGUAGES: AppLanguage[] = ['English', 'French', 'German', 'Ukrainian', 'Spanish'];
 const AVATARS = ['🌱', '🌿', '🌳', '🚀', '🧠', '✨', '🧘', '🔥', '💎', '🌊', '☀️', '🌕'];
@@ -51,6 +51,7 @@ export const Profile: React.FC = () => {
     const [swActive, setSwActive] = useState(false);
     const [isRetryingSw, setIsRetryingSw] = useState(false);
     const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+    const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
     /**
      * Mobile SW Detection Logic (Optimized)
@@ -176,7 +177,7 @@ export const Profile: React.FC = () => {
         }
 
         if (permissionState === 'granted') {
-            const sub = await subscribeToPush(user.id);
+            const sub = await subscribeToPush(user.id, notificationSettings?.routineTimeline);
             if (sub) {
                 updateUserPreferences({ notificationSettings: { ...notificationSettings, enabled: true } });
                 triggerNotification("Reminders Active ✨", "You'll receive reminders for your daily habits.", "achievement");
@@ -214,12 +215,16 @@ export const Profile: React.FC = () => {
 
     const updateTimelineTime = (phase: 'Morning' | 'Afternoon' | 'Evening', time: string) => {
         if (!notificationSettings) return;
+        const updatedTimeline = { ...notificationSettings.routineTimeline, [phase]: time };
         updateUserPreferences({
             notificationSettings: {
                 ...notificationSettings,
-                routineTimeline: { ...notificationSettings.routineTimeline, [phase]: time }
+                routineTimeline: updatedTimeline
             }
         });
+        if (user) {
+            syncPushSubscriptionSchedule(user.id, updatedTimeline);
+        }
     };
 
     const handleSavePin = async () => {
@@ -469,21 +474,54 @@ export const Profile: React.FC = () => {
                     <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider leading-none">Daily Schedule</h2>
                 </div>
 
-                <div className="grid grid-cols-1 gap-2.5">
-                    {(['Morning', 'Afternoon', 'Evening'] as const).map(phase => (
-                        <div key={phase} className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-slate-800 transition-all">
-                            <div className="flex items-center gap-3">
-                                <Clock size={15} className="text-slate-400" />
-                                <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">{phase}</span>
+                <div className="grid grid-cols-1 gap-3">
+                    {(['Morning', 'Afternoon', 'Evening'] as const).map(phase => {
+                        const currentTime = notificationSettings?.routineTimeline?.[phase] || (phase === 'Morning' ? '08:00' : phase === 'Afternoon' ? '13:00' : '19:00');
+                        const presets = phase === 'Morning' 
+                            ? ['07:00', '08:00', '09:00'] 
+                            : phase === 'Afternoon' 
+                            ? ['12:00', '13:00', '14:00'] 
+                            : ['18:00', '19:00', '20:00'];
+
+                        return (
+                            <div key={phase} className="p-3.5 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-slate-800 transition-all space-y-2.5">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2.5">
+                                        <Clock size={15} className="text-slate-400" />
+                                        <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">{phase} Routine</span>
+                                    </div>
+                                    <input 
+                                        type="time"
+                                        value={currentTime}
+                                        onChange={(e) => updateTimelineTime(phase, e.target.value)}
+                                        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1 text-xs font-mono font-semibold dark:text-white outline-none focus:border-indigo-500 transition-colors"
+                                    />
+                                </div>
+
+                                {/* Popular Quick-Set Presets */}
+                                <div className="flex items-center gap-1.5 pt-0.5">
+                                    <span className="text-[10px] text-slate-400 font-medium mr-1">Quick:</span>
+                                    {presets.map(tVal => {
+                                        const isPresetActive = currentTime === tVal;
+                                        return (
+                                            <button
+                                                key={tVal}
+                                                type="button"
+                                                onClick={() => updateTimelineTime(phase, tVal)}
+                                                className={`px-2.5 py-1 rounded-xl text-[11px] font-mono font-medium transition-all ${
+                                                    isPresetActive
+                                                        ? `${themeClasses?.primary || 'bg-indigo-600'} text-white shadow-xs`
+                                                        : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300'
+                                                }`}
+                                            >
+                                                {tVal}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
                             </div>
-                            <input 
-                                type="time"
-                                value={notificationSettings?.routineTimeline?.[phase] || "08:00"}
-                                onChange={(e) => updateTimelineTime(phase, e.target.value)}
-                                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-xs font-semibold dark:text-white outline-none"
-                            />
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </div>
 
@@ -760,16 +798,26 @@ export const Profile: React.FC = () => {
                             <button
                                 type="button"
                                 onClick={() => setShowConfirmDelete(false)}
-                                className="py-2.5 px-3 rounded-xl bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold border border-slate-200 dark:border-slate-700 transition-colors"
+                                className="py-3 px-4 rounded-2xl bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold border border-slate-200 dark:border-slate-700 transition-colors"
                             >
                                 {t('back')}
                             </button>
                             <button
                                 type="button"
-                                onClick={deleteAccount}
-                                className="py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-sm transition-colors"
+                                disabled={isDeletingAccount}
+                                onClick={async () => {
+                                    if (isDeletingAccount) return;
+                                    setIsDeletingAccount(true);
+                                    try {
+                                        await deleteAccount();
+                                    } catch {
+                                        setIsDeletingAccount(false);
+                                    }
+                                }}
+                                className="py-3 px-4 rounded-2xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-semibold shadow-sm transition-colors flex items-center justify-center gap-1.5"
                             >
-                                Confirm Erase
+                                {isDeletingAccount ? <Loader2 size={13} className="animate-spin" /> : null}
+                                <span>{isDeletingAccount ? 'Erasing...' : 'Confirm Erase'}</span>
                             </button>
                         </div>
                     </div>
@@ -780,7 +828,8 @@ export const Profile: React.FC = () => {
             {showPrivacyPolicy && <PrivacyPolicy onClose={() => setShowPrivacyPolicy(false)} />}
             
             {showCropModal && selectedImgSrc && (
-                <div className="fixed inset-0 z-[200] bg-slate-900/40 backdrop-blur-xl flex items-center justify-center p-6 animate-in fade-in duration-300">
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 animate-in fade-in duration-200">
+                    <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-md" onClick={() => { setShowCropModal(false); setSelectedImgSrc(null); }} />
                     <div className="bg-white dark:bg-slate-900 w-full max-w-[280px] rounded-[2.5rem] p-8 shadow-2xl overflow-hidden relative border border-slate-100 dark:border-slate-800 animate-in zoom-in-95 duration-300">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="font-bold text-slate-800 dark:text-slate-50 text-xl tracking-tight truncate">{t('adjust_photo')}</h3>
@@ -792,6 +841,7 @@ export const Profile: React.FC = () => {
                                 className="w-full h-full cursor-move touch-none"
                                 onMouseDown={onMouseDown} onMouseMove={onMouseMove}
                                 onMouseUp={() => setIsDragging(false)} onMouseLeave={() => setIsDragging(false)}
+                                touch-action="none"
                                 onTouchStart={onMouseDown} onTouchMove={onMouseMove} onTouchEnd={() => setIsDragging(false)}
                             >
                                 <img 
@@ -816,8 +866,8 @@ export const Profile: React.FC = () => {
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
-                            <button onClick={() => {setShowCropModal(false); setSelectedImgSrc(null);}} className="py-4 rounded-xl font-bold text-[10px] uppercase tracking-widest bg-slate-50 dark:bg-slate-800 text-slate-500 transition-all border border-slate-100 dark:border-slate-800 shadow-sm truncate">{t('back')}</button>
-                            <button onClick={handleSaveCroppedImage} disabled={isUploading} className={`py-4 rounded-xl font-bold text-[10px] uppercase tracking-widest text-white bg-gradient-to-br ${themeClasses?.gradient || 'from-indigo-600 to-blue-600'} shadow-lg transition-all truncate flex items-center justify-center gap-2`}>
+                            <button onClick={() => {setShowCropModal(false); setSelectedImgSrc(null);}} className="py-3.5 rounded-2xl font-bold text-[10px] uppercase tracking-widest bg-slate-50 dark:bg-slate-800 text-slate-500 transition-all border border-slate-100 dark:border-slate-800 shadow-sm truncate">{t('back')}</button>
+                            <button onClick={handleSaveCroppedImage} disabled={isUploading} className={`py-3.5 rounded-2xl font-bold text-[10px] uppercase tracking-widest text-white bg-gradient-to-br ${themeClasses?.gradient || 'from-indigo-600 to-blue-600'} shadow-lg transition-all truncate flex items-center justify-center gap-2`}>
                                 {isUploading ? <Loader2 size={14} className="animate-spin" /> : t('save')}
                             </button>
                         </div>

@@ -89,3 +89,32 @@ html.dark body {
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 0.2s;
 }
+
+/* Touch handling for interactive form elements */
+input,
+select,
+textarea,
+button {
+  touch-action: manipulation;
+}
+
+/* iOS Safari auto-zoom prevention: inputs must have a font size >= 16px on mobile viewports */
+@media screen and (max-width: 768px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Native date/time picker theme sync */
+input[type="date"],
+input[type="time"] {
+  color-scheme: light;
+}
+
+html.dark input[type="date"],
+html.dark input[type="time"] {
+  color-scheme: dark;
+}
+

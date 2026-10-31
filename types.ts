@@ -9,7 +9,7 @@ export enum GoalCategory {
   Creativity = 'Creativity'
 }
 
-export type GoalOutcome = 'Integrated' | 'Evolved' | 'Paused with Insight' | 'Completed' | 'Redirected';
+export type GoalOutcome = 'Integrated' | 'Evolved' | 'Paused' | 'Paused with Insight' | 'Completed' | 'Redirected';
 
 export interface Milestone {
   id: string;

@@ -85,6 +85,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
     const [showTriggerTooltip, setShowTriggerTooltip] = useState<boolean>(false);
     const [quickHabitTitle, setQuickHabitTitle] = useState<string>('');
     const [showScheduledHabits, setShowScheduledHabits] = useState<boolean>(false);
+    const [submittingHabit, setSubmittingHabit] = useState<boolean>(false);
 
     // Temptation Bundling (Premack Principle) Reward State
     const [hasReward, setHasReward] = useState<boolean>(false);
@@ -234,6 +235,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
         setRewardUnit('min');
         setTargetAmount('');
         setTargetUnit('pages');
+        setSubmittingHabit(false);
         setShowHabitModal(false);
     };
 
@@ -268,62 +270,67 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
 
     const handleSaveHabit = (e?: React.FormEvent) => {
         if (e) e.preventDefault();
-        if (!habitTitle.trim()) return;
+        if (submittingHabit || !habitTitle.trim()) return;
+        setSubmittingHabit(true);
         
-        const effectiveDays = scheduleType === 'weekly' 
-            ? (habitDays.length > 0 ? habitDays : [0, 1, 2, 3, 4, 5, 6])
-            : [];
+        try {
+            const effectiveDays = scheduleType === 'weekly' 
+                ? (habitDays.length > 0 ? habitDays : [0, 1, 2, 3, 4, 5, 6])
+                : [];
 
-        const existingHabit = editingHabitId ? habits.find(h => h.id === editingHabitId) : null;
-        const parsedTargetAmount = targetAmount ? parseFloat(targetAmount) : undefined;
+            const existingHabit = editingHabitId ? habits.find(h => h.id === editingHabitId) : null;
+            const parsedTargetAmount = targetAmount ? parseFloat(targetAmount) : undefined;
 
-        let rewardPayload: HabitReward | undefined = undefined;
-        if (hasReward && rewardTitle.trim() && rewardAmount > 0) {
-            rewardPayload = {
-                title: rewardTitle.trim(),
-                amount: rewardAmount,
-                unit: rewardUnit.trim() || 'min',
-                bankedBalance: existingHabit?.reward?.bankedBalance || 0,
-                totalEarned: existingHabit?.reward?.totalEarned || 0,
-                totalRedeemed: existingHabit?.reward?.totalRedeemed || 0
+            let rewardPayload: HabitReward | undefined = undefined;
+            if (hasReward && rewardTitle.trim() && rewardAmount > 0) {
+                rewardPayload = {
+                    title: rewardTitle.trim(),
+                    amount: rewardAmount,
+                    unit: rewardUnit.trim() || 'min',
+                    bankedBalance: existingHabit?.reward?.bankedBalance || 0,
+                    totalEarned: existingHabit?.reward?.totalEarned || 0,
+                    totalRedeemed: existingHabit?.reward?.totalRedeemed || 0
+                };
+            }
+
+            const payload = {
+                title: habitTitle.trim(),
+                category: habitCategory,
+                trigger: habitTrigger.trim(),
+                duration: habitDuration || '5m',
+                timeOfDay: habitTime,
+                daysOfWeek: effectiveDays,
+                monthlyDays: scheduleType === 'monthly' ? monthlyDays : [],
+                scheduleType,
+                linkedGoalId: linkedGoalId || undefined,
+                targetAmount: parsedTargetAmount,
+                targetUnit: parsedTargetAmount ? targetUnit : undefined,
+                reward: rewardPayload
             };
+
+            if (editingHabitId) {
+                updateHabit(editingHabitId, payload);
+                triggerNotification('Habit Updated', `"${payload.title}" has been saved.`, 'achievement');
+            } else {
+                addHabit({
+                    id: Date.now().toString(),
+                    ...payload,
+                    streak: 0,
+                    completedDates: [],
+                    createdAt: new Date().toISOString()
+                });
+                triggerNotification('Habit Saved ✨', `"${payload.title}" has been added to your habits.`, 'achievement');
+            }
+
+            // Align active dashboard tab so the user sees their new ritual immediately
+            if (payload.timeOfDay !== 'Anytime') {
+                setActiveHabitTab(payload.timeOfDay);
+            }
+
+            resetHabitForm();
+        } finally {
+            setSubmittingHabit(false);
         }
-
-        const payload = {
-            title: habitTitle.trim(),
-            category: habitCategory,
-            trigger: habitTrigger.trim(),
-            duration: habitDuration || '5m',
-            timeOfDay: habitTime,
-            daysOfWeek: effectiveDays,
-            monthlyDays: scheduleType === 'monthly' ? monthlyDays : [],
-            scheduleType,
-            linkedGoalId: linkedGoalId || undefined,
-            targetAmount: parsedTargetAmount,
-            targetUnit: parsedTargetAmount ? targetUnit : undefined,
-            reward: rewardPayload
-        };
-
-        if (editingHabitId) {
-            updateHabit(editingHabitId, payload);
-            triggerNotification('Habit Updated', `"${payload.title}" has been saved.`, 'achievement');
-        } else {
-            addHabit({
-                id: Date.now().toString(),
-                ...payload,
-                streak: 0,
-                completedDates: [],
-                createdAt: new Date().toISOString()
-            });
-            triggerNotification('Habit Saved ✨', `"${payload.title}" has been added to your habits.`, 'achievement');
-        }
-
-        // Align active dashboard tab so the user sees their new ritual immediately
-        if (payload.timeOfDay !== 'Anytime') {
-            setActiveHabitTab(payload.timeOfDay);
-        }
-
-        resetHabitForm();
     };
 
     const handleDeleteHabit = () => {
@@ -336,22 +343,27 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
     const handleQuickAddHabit = (e: React.FormEvent) => {
         e.preventDefault();
         const trimmed = quickHabitTitle.trim();
-        if (!trimmed) return;
+        if (!trimmed || submittingHabit) return;
+        setSubmittingHabit(true);
 
-        addHabit({
-            id: Date.now().toString(),
-            title: trimmed,
-            category: GoalCategory.Personal,
-            duration: '5m',
-            timeOfDay: activeHabitTab,
-            daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
-            streak: 0,
-            completedDates: [],
-            createdAt: new Date().toISOString()
-        });
+        try {
+            addHabit({
+                id: Date.now().toString(),
+                title: trimmed,
+                category: GoalCategory.Personal,
+                duration: '5m',
+                timeOfDay: activeHabitTab,
+                daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+                streak: 0,
+                completedDates: [],
+                createdAt: new Date().toISOString()
+            });
 
-        triggerNotification('Habit Saved ✨', `"${trimmed}" added for ${activeHabitTab}.`, 'achievement');
-        setQuickHabitTitle('');
+            triggerNotification('Habit Saved ✨', `"${trimmed}" added for ${activeHabitTab}.`, 'achievement');
+            setQuickHabitTitle('');
+        } finally {
+            setSubmittingHabit(false);
+        }
     };
 
     const filteredHabits = habitsForDay.filter(h => h.timeOfDay === activeHabitTab);
@@ -541,7 +553,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                                 value={quickHabitTitle}
                                 onChange={e => setQuickHabitTitle(e.target.value)}
                                 placeholder={`+ Quick add habit for ${activeHabitTab}...`}
-                                className="w-full bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 rounded-2xl px-4 py-2.5 text-xs text-slate-800 dark:text-white placeholder:text-slate-400 outline-none focus:border-indigo-500 shadow-sm transition-colors"
+                                className="w-full bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 rounded-2xl px-4 py-2.5 text-sm text-slate-800 dark:text-white placeholder:text-slate-400 outline-none focus:border-indigo-500 shadow-sm transition-colors"
                             />
                             {quickHabitTitle && (
                                 <button 
@@ -555,7 +567,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                         </div>
                         <button 
                             type="submit" 
-                            disabled={!quickHabitTitle.trim()} 
+                            disabled={!quickHabitTitle.trim() || submittingHabit} 
                             className={`px-4 py-2.5 rounded-2xl text-xs font-semibold uppercase tracking-wider text-white shadow-sm disabled:opacity-40 transition-all bg-gradient-to-br ${themeClasses.gradient} shrink-0 active:scale-95`}
                         >
                             Add
@@ -707,9 +719,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
             </div>
 
             {showHabitModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center animate-in fade-in duration-300">
-                    <div className="fixed -inset-[100px] bg-slate-950/60 backdrop-blur-2xl" onClick={resetHabitForm} />
-                    <div className="bg-white dark:bg-slate-900 w-[calc(100%-2.5rem)] max-w-md rounded-[2.5rem] p-6 sm:p-7 shadow-2xl border border-slate-100 dark:border-slate-800 relative animate-in zoom-in-95 duration-300 overflow-hidden flex flex-col max-h-[92vh]">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200">
+                    <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-md" onClick={resetHabitForm} />
+                    <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[2.5rem] p-6 sm:p-7 shadow-2xl border border-slate-100 dark:border-slate-800 relative animate-in zoom-in-95 duration-200 overflow-hidden flex flex-col max-h-[92vh]">
                         
                         {/* Modal Header */}
                         <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800/80">
@@ -819,7 +831,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                                             value={habitTrigger}
                                             onChange={e => setHabitTrigger(e.target.value)}
                                             placeholder="e.g. pour morning coffee, finish dinner..."
-                                            className="w-full bg-slate-50 dark:bg-slate-800/80 rounded-2xl px-4 py-3 text-xs sm:text-sm font-normal text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 border border-slate-200 dark:border-slate-700"
+                                            className="w-full bg-slate-50 dark:bg-slate-800/80 rounded-2xl px-4 py-3 text-sm font-normal text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 border border-slate-200 dark:border-slate-700"
                                         />
                                     </div>
 
@@ -842,7 +854,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                                                     }
                                                 }}
                                                 placeholder="e.g. read 5 pages, meditate for 3m, stretch..."
-                                                className="w-full bg-slate-50 dark:bg-slate-800/80 rounded-2xl px-4 py-3 text-xs sm:text-sm font-normal text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 pr-10 border border-slate-200 dark:border-slate-700"
+                                                className="w-full bg-slate-50 dark:bg-slate-800/80 rounded-2xl px-4 py-3 text-sm font-normal text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 pr-10 border border-slate-200 dark:border-slate-700"
                                             />
                                             <button
                                                 type="button"
@@ -1378,15 +1390,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                                     ) : (
                                         <button
                                             type="button"
-                                            disabled={!habitTitle.trim()}
+                                            disabled={!habitTitle.trim() || submittingHabit}
                                             onClick={(e) => {
                                                 e.preventDefault();
                                                 handleSaveHabit();
                                             }}
                                             className={`flex-1 bg-gradient-to-br ${themeClasses.gradient} text-white py-3.5 rounded-2xl font-semibold text-xs tracking-wide shadow-md hover:shadow-lg transition-all active:scale-[0.98] disabled:opacity-40 flex items-center justify-center gap-2`}
                                         >
-                                            <Sparkles size={15} />
-                                            <span>{editingHabitId ? 'Save Changes' : 'Save Habit'}</span>
+                                            {submittingHabit ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
+                                            <span>{submittingHabit ? 'Saving...' : editingHabitId ? 'Save Changes' : 'Save Habit'}</span>
                                         </button>
                                     )}
                                 </div>

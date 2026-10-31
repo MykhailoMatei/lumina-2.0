@@ -32,7 +32,7 @@ const ToastItem: React.FC<ToastItemProps> = ({
 
     return (
         <div 
-            className="bg-white dark:bg-slate-900 rounded-xl shadow-lg border border-slate-100 dark:border-slate-800 p-4 animate-in slide-in-from-right-full fade-in duration-300 flex gap-3 relative overflow-hidden"
+            className="bg-white dark:bg-slate-900 rounded-2xl shadow-lg border border-slate-100 dark:border-slate-800 p-4 animate-in slide-in-from-right-full fade-in duration-300 flex gap-3 relative overflow-hidden pointer-events-auto"
         >
             <div className={`w-1 absolute left-0 top-0 bottom-0 ${
                 n.type === 'achievement' ? 'bg-amber-400' : 
@@ -84,7 +84,7 @@ const NotificationSystem: React.FC = () => {
     if (notifications.length === 0) return null;
 
     return (
-        <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2 w-full max-w-sm px-4 sm:px-0">
+        <div className="fixed top-4 right-4 z-[45] flex flex-col gap-2 w-full max-w-sm px-4 sm:px-0 pointer-events-none">
             {notifications.map((n: AppNotification) => (
                 <ToastItem 
                     key={n.id}

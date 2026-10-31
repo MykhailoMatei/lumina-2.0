@@ -159,7 +159,7 @@ interface AppContextType extends UserState {
   updateUserPreferences: (prefs: Partial<UserState>) => void;
   unlockApp: (pin: string) => Promise<boolean> | boolean;
   setPinCode: (pin: string | null) => Promise<void> | void;
-  deleteAccount: () => void;
+  deleteAccount: () => Promise<void>;
   exportData: () => void;
   exportJournalMarkdown: () => void;
   importData: (json: string) => void;
@@ -710,18 +710,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       if (isSupabaseConfigured && user) {
         // 1. Call server endpoint to permanently delete Supabase Auth user & remote data
-        try {
-          const { data: sessionData } = await supabase.auth.getSession();
-          const token = sessionData?.session?.access_token;
-          if (token) {
-            const apiBase = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '');
-            await fetch(`${apiBase}/api/account/delete`, {
-              method: 'DELETE',
-              headers: { 'Authorization': `Bearer ${token}` }
-            });
-          }
-        } catch (serverPurgeErr) {
-          console.warn('[Account Delete] Server deletion non-fatal warning:', serverPurgeErr);
+        const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
+        if (sessionErr || !sessionData?.session?.access_token) {
+          throw new Error('Active session not found. Please re-authenticate before deleting account.');
+        }
+
+        const token = sessionData.session.access_token;
+        const apiBase = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '');
+        const res = await fetch(`${apiBase}/api/account/delete`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!res.ok) {
+          let errorMsg = 'Failed to delete remote account';
+          try {
+            const errJson = await res.json();
+            if (errJson?.error) errorMsg = errJson.error;
+          } catch {}
+          throw new Error(errorMsg);
         }
 
         // 2. Direct client fallback cleanup for tables
@@ -747,11 +754,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         await supabase.auth.signOut();
       }
-    } catch (e) {
-      console.warn("Cloud data wipe failed:", e);
+
+      // ONLY wipe local state and reload if remote wipe succeeded or offline guest user
+      localStorage.removeItem('lumina_state');
+      window.location.reload();
+    } catch (e: any) {
+      console.error("[Account Delete] Critical failure:", e);
+      triggerNotification('Deletion Failed', e?.message || 'Could not delete your cloud account. Local data preserved.', 'reminder');
+      throw e;
     }
-    localStorage.removeItem('lumina_state');
-    window.location.reload();
   };
 
   const exportData = () => {

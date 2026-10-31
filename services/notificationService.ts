@@ -41,8 +41,12 @@ export const requestNotificationPermission = async (): Promise<PermissionResult>
 
 /**
  * Creates the "Digital Mailbox" for the device and stores it in Supabase
+ * Includes user local timezone and routine schedule times for precise nudges.
  */
-export const subscribeToPush = async (userId: string | null) => {
+export const subscribeToPush = async (
+    userId: string | null,
+    customRoutineTimeline?: Record<string, string>
+) => {
     if (!('serviceWorker' in navigator) || !userId || !isSupabaseConfigured) return null;
 
     try {
@@ -59,15 +63,25 @@ export const subscribeToPush = async (userId: string | null) => {
         }
 
         if (subscription) {
-            // Save to the table 'user_push_subscriptions'
+            const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+            const routineTimes = customRoutineTimeline || {
+                Morning: '08:00',
+                Afternoon: '13:00',
+                Evening: '19:00'
+            };
+
+            // Save to the table 'user_push_subscriptions' with timezone and routine_times
             let { error } = await supabase.from('user_push_subscriptions').upsert({
                 user_id: userId,
                 subscription: subscription.toJSON(),
+                timezone: userTimezone,
+                routine_times: routineTimes,
                 updated_at: new Date().toISOString()
             });
 
-            // If the column updated_at doesn't exist yet on remote table, fallback without updated_at
-            if (error && (error.message?.includes('updated_at') || (error as any).code === 'PGRST204' || (error as any).code === '42703')) {
+            // Resilient fallback if table has not had timezone/routine_times columns migrated yet
+            if (error) {
+                console.warn('Upsert with timezone/routine_times failed, falling back to base subscription payload:', error.message);
                 const retryRes = await supabase.from('user_push_subscriptions').upsert({
                     user_id: userId,
                     subscription: subscription.toJSON()
@@ -82,6 +96,33 @@ export const subscribeToPush = async (userId: string | null) => {
     } catch (e) {
         console.error("Push Link Failed. Check VAPID Public Key and Browser permissions.", e);
         return null;
+    }
+};
+
+/**
+ * Synchronizes user's routine timeline and timezone to their backend push subscription
+ */
+export const syncPushSubscriptionSchedule = async (
+    userId: string,
+    routineTimeline: Record<string, string>
+) => {
+    if (!userId || !isSupabaseConfigured) return;
+    try {
+        const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+        const { error } = await supabase
+            .from('user_push_subscriptions')
+            .update({
+                timezone: userTimezone,
+                routine_times: routineTimeline,
+                updated_at: new Date().toISOString()
+            })
+            .eq('user_id', userId);
+
+        if (error) {
+            console.warn('Could not sync push schedule to backend:', error.message);
+        }
+    } catch (err) {
+        console.warn('Failed to sync push subscription schedule', err);
     }
 };
 

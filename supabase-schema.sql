@@ -94,12 +94,53 @@ alter table public.journal_entries add column if not exists last_updated bigint 
 create table if not exists public.user_push_subscriptions (
     user_id uuid references auth.users(id) on delete cascade primary key,
     subscription jsonb not null,
+    timezone text not null default 'UTC',
+    routine_times jsonb not null default '{"Morning": "08:00", "Afternoon": "13:00", "Evening": "19:00"}'::jsonb,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
 );
 
 -- Migration for existing user_push_subscriptions
+alter table public.user_push_subscriptions add column if not exists timezone text not null default 'UTC';
+alter table public.user_push_subscriptions add column if not exists routine_times jsonb not null default '{"Morning": "08:00", "Afternoon": "13:00", "Evening": "19:00"}'::jsonb;
 alter table public.user_push_subscriptions add column if not exists updated_at timestamptz default now();
+
+-- Helper function: Returns subscriptions whose local time matches the scheduled routine phase (e.g. 'Morning', 'Afternoon', 'Evening')
+-- Also filters out users who have already completed ALL of their habits for that phase today.
+create or replace function public.get_users_for_routine_nudge(target_phase text)
+returns table (
+    user_id uuid,
+    subscription jsonb,
+    user_timezone text,
+    user_local_time text
+)
+language sql
+security definer
+set search_path = public
+as $$
+    select 
+        s.user_id,
+        s.subscription,
+        coalesce(s.timezone, 'UTC') as user_timezone,
+        to_char(timezone(coalesce(s.timezone, 'UTC'), now()), 'HH24:MI') as user_local_time
+    from public.user_push_subscriptions s
+    where 
+        to_char(timezone(coalesce(s.timezone, 'UTC'), now()), 'HH24:MI') = (s.routine_times->>target_phase)
+        -- "Already Done" check:
+        -- If the user has active habits for this phase, only nudge if at least one habit is NOT yet completed today.
+        -- If all habits for this phase are already completed today, omit them.
+        and not exists (
+            select 1
+            from public.habits h1
+            where h1.user_id = s.user_id
+              and h1.deleted_at is null
+              and h1.time_of_day = target_phase
+            having count(*) > 0 
+               and count(*) = count(case when h1.completed_dates @> to_jsonb(to_char(timezone(coalesce(s.timezone, 'UTC'), now()), 'YYYY-MM-DD')) then 1 end)
+        );
+$$;
+
+grant execute on function public.get_users_for_routine_nudge(text) to authenticated, service_role;
 
 -- 6. Enable Row Level Security (RLS)
 alter table public.goals enable row level security;
@@ -159,3 +200,67 @@ create policy "Users can manage their own journal photos" on storage.objects
     for all using (bucket_id = 'journal' and (storage.foldername(name))[1] = auth.uid()::text);
 
 drop policy if exists "Journal photos are publicly viewable" on storage.objects;
+
+-- ==============================================================================
+-- 9. Automatic Routine Push Scheduling (pg_cron + pg_net)
+-- Run this in Supabase SQL Editor once your Edge Function (send-push-nudge) is deployed.
+-- Replace YOUR_PROJECT_REF and YOUR_SERVICE_ROLE_KEY with your project values.
+-- ==============================================================================
+
+create extension if not exists pg_cron;
+create extension if not exists pg_net;
+
+-- Unschedule existing job if re-running
+do $$
+begin
+    if exists (select 1 from cron.job where jobname = 'lumina-routine-nudge-check') then
+        perform cron.unschedule('lumina-routine-nudge-check');
+    end if;
+end;
+$$;
+
+-- Run every minute: checks user routine times matching current local time for Morning, Afternoon, Evening
+select cron.schedule(
+    'lumina-routine-nudge-check',
+    '* * * * *',
+    $$
+    -- Morning Phase Check
+    select net.http_post(
+        url := 'https://YOUR_PROJECT_REF.supabase.co/functions/v1/send-push-nudge',
+        headers := jsonb_build_object(
+            'Content-Type', 'application/json',
+            'Authorization', 'Bearer YOUR_SERVICE_ROLE_KEY'
+        ),
+        body := jsonb_build_object(
+            'type', 'routine_nudge',
+            'phase', 'Morning'
+        )
+    );
+
+    -- Afternoon Phase Check
+    select net.http_post(
+        url := 'https://YOUR_PROJECT_REF.supabase.co/functions/v1/send-push-nudge',
+        headers := jsonb_build_object(
+            'Content-Type', 'application/json',
+            'Authorization', 'Bearer YOUR_SERVICE_ROLE_KEY'
+        ),
+        body := jsonb_build_object(
+            'type', 'routine_nudge',
+            'phase', 'Afternoon'
+        )
+    );
+
+    -- Evening Phase Check
+    select net.http_post(
+        url := 'https://YOUR_PROJECT_REF.supabase.co/functions/v1/send-push-nudge',
+        headers := jsonb_build_object(
+            'Content-Type', 'application/json',
+            'Authorization', 'Bearer YOUR_SERVICE_ROLE_KEY'
+        ),
+        body := jsonb_build_object(
+            'type', 'routine_nudge',
+            'phase', 'Evening'
+        )
+    );
+    $$
+);

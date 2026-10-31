@@ -42,7 +42,74 @@ Deno.serve(async (req: Request) => {
     );
 
     const body = await req.json();
-    const { type, user_id } = body;
+    const { type, user_id, phase } = body;
+
+    // Scheduled Cron/Routine Phase Nudge Mode (targeted by user local time)
+    if (type === 'routine_nudge' && phase && isService) {
+      const { data: usersToNudge, error: rpcError } = await supabase
+        .rpc('get_users_for_routine_nudge', { target_phase: phase });
+
+      if (rpcError) throw rpcError;
+
+      let sentCount = 0;
+      const phaseTitles: Record<string, string> = {
+        Morning: 'Morning Routine ✨',
+        Afternoon: 'Afternoon Check-in 🌿',
+        Evening: 'Evening Reflection 🌙'
+      };
+      const title = phaseTitles[phase] || 'Time for your ritual';
+      const payload = JSON.stringify({
+        title,
+        body: `It's your scheduled ${phase.toLowerCase()} ritual time. Step into your next micro-habit.`,
+        tag: `lumina-routine-${phase.toLowerCase()}`
+      });
+
+      for (const item of (usersToNudge || [])) {
+        try {
+          // Double-check: ensure the user hasn't completed all active habits for this phase today
+          const { data: habitsForPhase } = await supabase
+            .from('habits')
+            .select('completed_dates')
+            .eq('user_id', item.user_id)
+            .eq('time_of_day', phase)
+            .is('deleted_at', null);
+
+          if (habitsForPhase && habitsForPhase.length > 0) {
+            // Determine today's date in user's timezone if provided, or UTC fallback
+            const userTz = item.user_timezone || 'UTC';
+            let todayInUserTz: string;
+            try {
+              todayInUserTz = new Intl.DateTimeFormat('en-CA', { timeZone: userTz }).format(new Date());
+            } catch {
+              todayInUserTz = new Date().toISOString().split('T')[0];
+            }
+
+            const allCompleted = habitsForPhase.every((h: any) => {
+              const dates = Array.isArray(h.completed_dates) ? h.completed_dates : [];
+              return dates.includes(todayInUserTz);
+            });
+
+            // If user has active habits for this phase and finished all of them, skip push
+            if (allCompleted) {
+              continue;
+            }
+          }
+
+          await webpush.sendNotification(item.subscription, payload);
+          sentCount++;
+        } catch (pushErr: any) {
+          const statusCode = Number(pushErr?.statusCode || pushErr?.status || pushErr?.code);
+          if (statusCode === 410 || statusCode === 404) {
+            await supabase.from('user_push_subscriptions').delete().eq('user_id', item.user_id);
+          }
+        }
+      }
+
+      return new Response(JSON.stringify({ success: true, nudgedCount: sentCount }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     let targetUserId = user_id;
 
     // Security Check: Only service role can notify other users arbitrarily

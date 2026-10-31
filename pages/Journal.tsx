@@ -222,8 +222,8 @@ export const Journal: React.FC = () => {
 
     const allFolders = useMemo(() => {
         return [
-            ...DEFAULT_CORE_FOLDERS.map(f => ({ id: f.id, label: f.label, icon: Folder, isCustom: false })),
-            ...customFolders.map(name => ({ id: name, label: name, icon: Folder, isCustom: true }))
+            ...DEFAULT_CORE_FOLDERS.map(f => ({ id: f.id, label: f.label, desc: f.desc, icon: Folder, isCustom: false })),
+            ...customFolders.map(name => ({ id: name, label: name, desc: 'Custom folder', icon: Folder, isCustom: true }))
         ];
     }, [customFolders]);
 
@@ -326,6 +326,7 @@ export const Journal: React.FC = () => {
         setWizardStep(1);
         setShowCategoryTooltip(false);
         setShowInlineFolderInput(false);
+        setSubmitting(false);
         setShowEditor(false);
     };
 
@@ -337,7 +338,8 @@ export const Journal: React.FC = () => {
     };
 
     const handleSubmit = () => {
-        if (!content.trim()) return;
+        if (!content.trim() || submitting) return;
+        setSubmitting(true);
         
         const targetId = editingEntryId || Date.now().toString();
         const generatedTitle = title.trim() || content.trim().split('\n')[0].slice(0, 48) || 'Daily Note';
@@ -424,7 +426,8 @@ export const Journal: React.FC = () => {
     const handleQuickJournalSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         const raw = quickNoteText.trim();
-        if (!raw) return;
+        if (!raw || submitting) return;
+        setSubmitting(true);
 
         const targetId = Date.now().toString();
         const generatedTitle = raw.split('\n')[0].slice(0, 48) || 'Daily Note';
@@ -443,6 +446,7 @@ export const Journal: React.FC = () => {
 
         triggerNotification('Saved ✨', `"${generatedTitle}" logged to timeline.`, 'achievement');
         setQuickNoteText('');
+        setSubmitting(false);
 
         (async () => {
             try {
@@ -612,7 +616,7 @@ export const Journal: React.FC = () => {
                         placeholder={`Search ${selectedCategoryFilter === 'All' ? 'memories, meals, logs' : selectedCategoryFilter}...`}
                         value={search} 
                         onChange={e => setSearch(e.target.value)} 
-                        className="w-full h-10 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl pl-10 pr-4 text-xs font-normal outline-none shadow-sm transition-all dark:text-white placeholder:text-slate-400" 
+                        className="w-full h-10 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl pl-10 pr-4 text-sm font-normal outline-none shadow-sm transition-all dark:text-white placeholder:text-slate-400" 
                     />
                     {search && (
                         <button onClick={() => setSearch('')} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
@@ -630,7 +634,7 @@ export const Journal: React.FC = () => {
                         value={quickNoteText}
                         onChange={e => setQuickNoteText(e.target.value)}
                         placeholder={`+ Quick note in ${selectedCategoryFilter === 'All' ? 'Daily' : selectedCategoryFilter} (e.g. Pasta for dinner, great workout)...`}
-                        className="w-full h-10 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2 text-xs font-normal text-slate-800 dark:text-white placeholder:text-slate-400 outline-none focus:border-indigo-500 shadow-sm transition-colors"
+                        className="w-full h-10 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2 text-sm font-normal text-slate-800 dark:text-white placeholder:text-slate-400 outline-none focus:border-indigo-500 shadow-sm transition-colors"
                     />
                     {quickNoteText && (
                         <button 
@@ -644,7 +648,7 @@ export const Journal: React.FC = () => {
                 </div>
                 <button 
                     type="submit" 
-                    disabled={!quickNoteText.trim()}
+                    disabled={!quickNoteText.trim() || submitting}
                     className={`h-10 px-4 rounded-xl text-white text-xs font-semibold uppercase tracking-wider bg-gradient-to-br ${themeClasses.gradient} disabled:opacity-40 transition-all shrink-0 active:scale-95 shadow-sm flex items-center justify-center`}
                 >
                     Log
@@ -857,7 +861,7 @@ export const Journal: React.FC = () => {
             {/* STEP-BY-STEP CREATION WIZARD MODAL */}
             {showEditor && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
-                    <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-xl" onClick={resetEditor} />
+                    <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-md" onClick={resetEditor} />
                     <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-[2.5rem] p-6 sm:p-7 shadow-2xl relative animate-in zoom-in-95 duration-300 flex flex-col max-h-[90vh] overflow-hidden border border-slate-100 dark:border-slate-800">
                         
                         {/* WIZARD HEADER */}
@@ -1071,7 +1075,7 @@ export const Journal: React.FC = () => {
                                                 value={newFolderName}
                                                 onChange={(e) => setNewFolderName(e.target.value)}
                                                 placeholder="Folder name (e.g. Travel, Books, Ideas)"
-                                                className="flex-1 bg-transparent text-xs text-slate-800 dark:text-white outline-none font-medium placeholder:text-slate-400"
+                                                className="flex-1 bg-transparent text-sm text-slate-800 dark:text-white outline-none font-medium placeholder:text-slate-400"
                                                 onKeyDown={(e) => {
                                                     if (e.key === 'Enter') {
                                                         e.preventDefault();
@@ -1097,26 +1101,53 @@ export const Journal: React.FC = () => {
                                         </div>
                                     )}
 
-                                    {/* Minimalist Folder Boxes Grid */}
-                                    <div className="grid grid-cols-2 gap-2.5">
+                                    {/* Unified Icon-Card Folder Grid matching Dashboard & Goals */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 max-h-56 overflow-y-auto no-scrollbar pr-0.5">
                                         {allFolders.map(f => {
                                             const isSelected = normalizeCategory(category) === f.id;
+                                            let IconComponent = Folder;
+                                            let descText = f.desc || 'Journal folder';
+                                            if (f.id === 'Daily') {
+                                                IconComponent = Sun;
+                                                descText = 'Everyday routines & memories';
+                                            } else if (f.id === 'Growth') {
+                                                IconComponent = Sparkles;
+                                                descText = 'Mindset, habits & lessons';
+                                            } else if (f.id === 'Wellness') {
+                                                IconComponent = Heart;
+                                                descText = 'Body, workouts & energy';
+                                            } else if (f.id === 'Work') {
+                                                IconComponent = Briefcase;
+                                                descText = 'Career, projects & focus';
+                                            }
+
                                             return (
                                                 <button
                                                     key={f.id}
                                                     type="button"
                                                     onClick={() => setCategory(f.id)}
-                                                    className={`p-3 rounded-2xl border text-left flex items-center justify-between transition-all ${
+                                                    className={`p-3 rounded-2xl border text-left flex items-start gap-2.5 transition-all ${
                                                         isSelected
-                                                            ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-slate-900 dark:border-white shadow-md'
-                                                            : 'bg-white dark:bg-slate-800/60 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 text-slate-700 dark:text-slate-200'
+                                                            ? 'bg-slate-50 dark:bg-slate-800 border-indigo-500 ring-2 ring-indigo-500/20 shadow-xs'
+                                                            : 'bg-white dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
                                                     }`}
                                                 >
-                                                    <div className="flex items-center gap-2.5 min-w-0">
-                                                        <Folder size={15} className={isSelected ? 'text-indigo-400 dark:text-indigo-600' : 'text-slate-400'} />
-                                                        <span className="text-xs font-semibold truncate">{f.label}</span>
+                                                    <div className={`p-2 rounded-xl shrink-0 ${isSelected ? `${themeClasses.secondary} ${themeClasses.text}` : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>
+                                                        <IconComponent size={16} />
                                                     </div>
-                                                    {isSelected && <Check size={13} className={isSelected ? 'text-white dark:text-slate-900' : ''} />}
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="text-xs font-semibold text-slate-800 dark:text-white truncate">
+                                                                {f.label}
+                                                            </span>
+                                                            {isSelected && (
+                                                                <CheckCircle2 size={14} className="text-indigo-500 shrink-0" />
+                                                            )}
+                                                        </div>
+                                                        <p className="text-[10px] text-slate-400 truncate mt-0.5 font-normal">
+                                                            {descText}
+                                                        </p>
+                                                    </div>
                                                 </button>
                                             );
                                         })}
@@ -1140,7 +1171,7 @@ export const Journal: React.FC = () => {
                                             value={title}
                                             onChange={e => setTitle(e.target.value)}
                                             placeholder="e.g. Pasta night with friends, Great gym session, Morning walk..."
-                                            className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-800 dark:text-white outline-none focus:border-indigo-500 transition-colors"
+                                            className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-800 dark:text-white outline-none focus:border-indigo-500 transition-colors"
                                         />
                                     </div>
 
@@ -1165,7 +1196,7 @@ export const Journal: React.FC = () => {
                                             rows={6}
                                             value={content} 
                                             onChange={e => setContent(e.target.value)} 
-                                            className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 text-xs font-normal text-slate-800 dark:text-white placeholder:text-slate-400 outline-none focus:border-indigo-500 transition-colors resize-none leading-relaxed" 
+                                            className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 text-sm font-normal text-slate-800 dark:text-white placeholder:text-slate-400 outline-none focus:border-indigo-500 transition-colors resize-none leading-relaxed" 
                                             placeholder={currentStyleConfig.placeholder}
                                         />
                                     </div>
@@ -1348,10 +1379,10 @@ export const Journal: React.FC = () => {
                                 <button
                                     type="button"
                                     onClick={handleSubmit}
-                                    disabled={!content.trim()}
-                                    className={`px-6 py-2.5 rounded-xl text-white font-semibold text-xs uppercase tracking-wider shadow-md flex items-center gap-2 bg-gradient-to-br ${themeClasses.gradient} disabled:opacity-40 active:scale-[0.98] transition-all`}
+                                    disabled={!content.trim() || submitting}
+                                    className={`px-6 py-3 rounded-2xl text-white font-semibold text-xs uppercase tracking-wider shadow-md flex items-center gap-2 bg-gradient-to-br ${themeClasses.gradient} disabled:opacity-40 active:scale-[0.98] transition-all`}
                                 >
-                                    <CheckCircle2 size={14} />
+                                    {submitting ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
                                     <span>{editingEntryId ? 'Update Entry' : 'Save to Timeline'}</span>
                                 </button>
                             )}
@@ -1362,9 +1393,9 @@ export const Journal: React.FC = () => {
 
             {/* CREATE CUSTOM FOLDER MODAL */}
             {showNewFolderModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-                    <div className="absolute inset-0 bg-slate-950/50 backdrop-blur-sm" onClick={() => setShowNewFolderModal(false)} />
-                    <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl p-5 shadow-2xl relative border border-slate-100 dark:border-slate-800 space-y-4 animate-in zoom-in-95">
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-md" onClick={() => setShowNewFolderModal(false)} />
+                    <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-[2rem] p-6 shadow-2xl relative border border-slate-100 dark:border-slate-800 space-y-4 animate-in zoom-in-95">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
@@ -1390,7 +1421,7 @@ export const Journal: React.FC = () => {
                                 value={newFolderName}
                                 onChange={e => setNewFolderName(e.target.value)}
                                 placeholder="Folder name (e.g. Travel, Books, Ideas)"
-                                className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 dark:text-white outline-none focus:border-indigo-500"
+                                className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-sm font-medium text-slate-800 dark:text-white outline-none focus:border-indigo-500"
                                 onKeyDown={e => {
                                     if (e.key === 'Enter') {
                                         e.preventDefault();
@@ -1404,7 +1435,7 @@ export const Journal: React.FC = () => {
                             <button
                                 type="button"
                                 onClick={() => setShowNewFolderModal(false)}
-                                className="px-3.5 py-2 text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400"
+                                className="px-4 py-2.5 text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400"
                             >
                                 Cancel
                             </button>
@@ -1412,7 +1443,7 @@ export const Journal: React.FC = () => {
                                 type="button"
                                 onClick={() => handleCreateCustomFolder(newFolderName)}
                                 disabled={!newFolderName.trim()}
-                                className={`px-4 py-2 rounded-xl text-white text-xs font-semibold uppercase tracking-wider bg-gradient-to-br ${themeClasses.gradient} disabled:opacity-40 shadow-sm`}
+                                className={`px-5 py-2.5 rounded-2xl text-white text-xs font-semibold uppercase tracking-wider bg-gradient-to-br ${themeClasses.gradient} disabled:opacity-40 shadow-sm`}
                             >
                                 Create Folder
                             </button>

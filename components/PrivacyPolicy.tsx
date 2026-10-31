@@ -10,8 +10,9 @@ export const PrivacyPolicy: React.FC<Props> = ({ onClose }) => {
     const { t } = useApp();
     
     return (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden max-h-[85vh] flex flex-col animate-in zoom-in-95 border border-slate-100 dark:border-slate-800">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200">
+            <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-md" onClick={onClose} />
+            <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden max-h-[85vh] flex flex-col relative animate-in zoom-in-95 border border-slate-100 dark:border-slate-800">
                 <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900">
                     <div className="flex items-center gap-3">
                         <Shield className="text-emerald-500" size={24} />

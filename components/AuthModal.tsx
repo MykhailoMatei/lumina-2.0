@@ -77,7 +77,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
             {/* Overlay */}
             <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-md" onClick={onClose} />
             
@@ -104,7 +104,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                     <button 
                         onClick={handleGoogleLogin}
                         disabled={googleLoading}
-                        className="w-full flex items-center justify-center gap-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 py-2.5 rounded-xl shadow-sm active:scale-[0.98] transition-all hover:bg-slate-50 disabled:opacity-50"
+                        className="w-full flex items-center justify-center gap-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 py-3 rounded-2xl shadow-sm active:scale-[0.98] transition-all hover:bg-slate-50 disabled:opacity-50"
                     >
                         {googleLoading ? (
                             <Loader2 size={15} className="animate-spin text-slate-400" />
@@ -124,7 +124,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                     </button>
 
                     {showHelp && (
-                        <div className="mt-2 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl text-xs font-normal text-slate-500 dark:text-slate-400 space-y-1.5 animate-in slide-in-from-top-2">
+                        <div className="mt-2 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-2xl text-xs font-normal text-slate-500 dark:text-slate-400 space-y-1.5 animate-in slide-in-from-top-2">
                             <p>1. Ensure <b>Google Provider</b> is enabled in Supabase Auth Dashboard.</p>
                             <p>2. Set GCP Redirect URI to the Supabase callback URL.</p>
                             <p>3. Add <b>{window.location.origin}</b> to Supabase <span className="text-indigo-500">Redirect URLs</span>.</p>
@@ -147,7 +147,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                                 required
                                 value={email}
                                 onChange={e => setEmail(e.target.value)}
-                                className="w-full bg-slate-50 dark:bg-slate-800 rounded-xl pl-9 pr-3.5 py-2.5 text-xs font-normal border border-slate-200 dark:border-slate-700 focus:border-indigo-500 outline-none dark:text-white transition-all"
+                                className="w-full bg-slate-50 dark:bg-slate-800 rounded-2xl pl-9 pr-3.5 py-3 text-sm font-normal border border-slate-200 dark:border-slate-700 focus:border-indigo-500 outline-none dark:text-white transition-all"
                                 placeholder="Email"
                             />
                         </div>
@@ -158,7 +158,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                                 required
                                 value={password}
                                 onChange={e => setPassword(e.target.value)}
-                                className="w-full bg-slate-50 dark:bg-slate-800 rounded-xl pl-9 pr-3.5 py-2.5 text-xs font-normal border border-slate-200 dark:border-slate-700 focus:border-indigo-500 outline-none dark:text-white transition-all"
+                                className="w-full bg-slate-50 dark:bg-slate-800 rounded-2xl pl-9 pr-3.5 py-3 text-sm font-normal border border-slate-200 dark:border-slate-700 focus:border-indigo-500 outline-none dark:text-white transition-all"
                                 placeholder="Password"
                             />
                         </div>
@@ -167,7 +167,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                     <button 
                         type="submit"
                         disabled={loading}
-                        className={`w-full py-3 rounded-xl bg-gradient-to-br ${themeClasses.gradient} text-white font-semibold text-xs uppercase tracking-wider shadow-md flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50 mt-1`}
+                        className={`w-full py-3.5 rounded-2xl bg-gradient-to-br ${themeClasses.gradient} text-white font-semibold text-xs uppercase tracking-wider shadow-md flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50 mt-1`}
                     >
                         {loading ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} strokeWidth={2.5} />}
                         {isSignUp ? 'Create Account' : 'Sign In'}
